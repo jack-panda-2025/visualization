@@ -179,16 +179,7 @@ function setupVTK(container) {
   window.addEventListener('resize', resizeGL);
   resizeGL();
 
-  // Interactor
-  const interactor = vtkRenderWindowInteractor.newInstance();
-  interactor.setView(glWindow);
-  interactor.initialize();
-  interactor.bindEvents(container);
-
-  const style = vtkInteractorStyleTrackballCamera.newInstance();
-  interactor.setInteractorStyle(style);
-
-  // Actor / mapper
+  // Actor / mapper — must exist before interactor.initialize() triggers render
   mapper = vtkMapper.newInstance({
     interpolateScalarsBeforeMapping: false,
   });
@@ -197,13 +188,20 @@ function setupVTK(container) {
 
   const actor = vtkActor.newInstance();
   actor.setMapper(mapper);
-
-  // Slightly reduce specular highlights for a cleaner simulation look
   actor.getProperty().setAmbient(0.2);
   actor.getProperty().setDiffuse(0.8);
   actor.getProperty().setSpecular(0.1);
 
   renderer.addActor(actor);
+
+  // Interactor — initialize() internally triggers a render; actor must exist
+  const interactor = vtkRenderWindowInteractor.newInstance();
+  interactor.setView(glWindow);
+  interactor.initialize();
+  interactor.bindEvents(container);
+
+  const style = vtkInteractorStyleTrackballCamera.newInstance();
+  interactor.setInteractorStyle(style);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
