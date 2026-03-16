@@ -18,3 +18,6 @@ __pycache__/
 # Generated outputs
 output/
 analysis_result.png
+
+# Server local node_modules (self-contained, not tracked)
+server/node_modules/
