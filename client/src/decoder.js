@@ -9,7 +9,7 @@
 
 export async function loadFrame(url, manifest) {
   const nNodes = manifest.n_nodes;
-  const nShell = manifest.n_shell;
+  const nTris  = manifest.n_tris;
 
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`Fetch failed: ${url} → ${resp.status}`);
@@ -17,8 +17,8 @@ export async function loadFrame(url, manifest) {
   const buf = await resp.arrayBuffer();
 
   const posByteLen  = nNodes * 3 * 4;
-  const peeqByteLen = nShell * 4;
-  const expected    = posByteLen + peeqByteLen + nShell * 4;
+  const peeqByteLen = nTris * 4;
+  const expected    = posByteLen + peeqByteLen + nTris * 4;
 
   if (buf.byteLength < expected) {
     throw new Error(

@@ -42,7 +42,7 @@ const fieldSelect   = document.getElementById('field-select');
 // ── State ─────────────────────────────────────────────────────────────────────
 let manifest     = null;
 let frameCache   = new Map();     // idx → { positions, peeq, alive }
-let connectivity = null;          // Int32Array flat quad indices
+let connectivity = null;          // Int32Array flat triangle indices (3 per cell)
 
 let renderer     = null;
 let renderWindow = null;
@@ -86,11 +86,11 @@ function computeDispMag(positions, frame0positions) {
 
 function avgNodeToCell(nodeMag, nCells) {
   const cellMag = new Float32Array(nCells);
-  // connectivity: flat quad indices, 4 values per cell
+  // connectivity: flat triangle indices, 3 values per cell
   for (let c = 0; c < nCells; c++) {
-    const base = c * 4;
+    const base = c * 3;
     cellMag[c] = (nodeMag[connectivity[base]]   + nodeMag[connectivity[base+1]] +
-                  nodeMag[connectivity[base+2]]  + nodeMag[connectivity[base+3]]) * 0.25;
+                  nodeMag[connectivity[base+2]]) / 3;
   }
   return cellMag;
 }
@@ -125,20 +125,19 @@ function setupVTK(container) {
 // ── Build polydata from connectivity + positions ───────────────────────────────
 function buildPolyData(positions) {
   const nNodes = positions.length / 3;
-  const nCells = connectivity.length / 4;
+  const nCells = connectivity.length / 3;  // triangles: 3 indices per cell
 
   // Points
   const pts = vtkPoints.newInstance({ dataType: 'Float32Array' });
   pts.setData(positions, 3);
 
-  // Cells: VTK CellArray format [n0, i0, i1, i2, i3,  n1, i0, i1, i2, i3, ...]
-  const cellData = new Int32Array(nCells * 5);
+  // Cells: VTK CellArray format [n0, i0, i1, i2,  n1, i0, i1, i2, ...]
+  const cellData = new Int32Array(nCells * 4);
   for (let c = 0; c < nCells; c++) {
-    cellData[c*5]   = 4;
-    cellData[c*5+1] = connectivity[c*4];
-    cellData[c*5+2] = connectivity[c*4+1];
-    cellData[c*5+3] = connectivity[c*4+2];
-    cellData[c*5+4] = connectivity[c*4+3];
+    cellData[c*4]   = 3;
+    cellData[c*4+1] = connectivity[c*3];
+    cellData[c*4+2] = connectivity[c*3+1];
+    cellData[c*4+3] = connectivity[c*3+2];
   }
   const polys = vtkCellArray.newInstance();
   polys.setData(cellData);
@@ -160,7 +159,7 @@ function buildPolyData(positions) {
 // ── Apply frame ───────────────────────────────────────────────────────────────
 function applyFrame(idx) {
   const { positions, peeq, alive } = frameCache.get(idx);
-  const nCells = manifest.n_shell;
+  const nCells = manifest.n_tris;
 
   // Update point positions
   polydata.getPoints().setData(positions, 3);
@@ -275,7 +274,7 @@ async function init() {
     setProgress(0.05, 'Loading connectivity…');
     const connResp = await fetch(`${SERVER}/connectivity.bin`);
     const connBuf  = await connResp.arrayBuffer();
-    connectivity   = new Int32Array(connBuf);   // flat quad indices
+    connectivity   = new Int32Array(connBuf);   // flat triangle indices (3 per tri)
 
     setProgress(0.10, 'Setting up renderer…');
     setupVTK(document.getElementById('vtk-container'));
