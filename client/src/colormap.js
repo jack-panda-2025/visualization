@@ -13,7 +13,6 @@
  */
 export function buildColorTransferFunction(vtkColorTransferFunction, minVal, maxVal) {
   const ctf = vtkColorTransferFunction.newInstance();
-  ctf.setColorSpaceToDiverging();
 
   const range = maxVal - minVal || 1.0;
 
