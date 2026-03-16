@@ -8,7 +8,7 @@
  */
 
 async function decompress(arrayBuffer) {
-  const ds     = new DecompressionStream('deflate');
+  const ds     = new DecompressionStream('gzip');
   const writer = ds.writable.getWriter();
   writer.write(new Uint8Array(arrayBuffer));
   writer.close();

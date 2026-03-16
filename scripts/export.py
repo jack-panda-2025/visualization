@@ -7,7 +7,7 @@ export.py — 完整导出管线
 - 每帧 zlib 压缩
 - 输出到 output/
 """
-import json, zlib
+import json, gzip
 import numpy as np
 from pathlib import Path
 import pyvista as pv
@@ -126,9 +126,9 @@ for fi in range(n_frames):
         alive_solid_tris = np.ones(n_solid_tris, dtype=np.uint8)
     alive_all = np.concatenate([alive_shell_tris, alive_solid_tris])
 
-    # 打包 + zlib 压缩
+    # 打包 + gzip 压缩
     raw        = positions.tobytes() + peeq_all.tobytes() + alive_all.tobytes()
-    compressed = zlib.compress(raw, level=6)
+    compressed = gzip.compress(raw, compresslevel=6)
     (OUT / f"frame_{fi:02d}.bin").write_bytes(compressed)
 
     peeq_max = float(peeq_shell.max())
