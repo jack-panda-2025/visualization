@@ -1,11 +1,3 @@
-/**
- * decoder.js — 解码 float32 直出的帧数据
- *
- * Binary layout (after zlib decompression):
- *   [0 .. n_nodes*3*4 - 1]        float32  positions XYZ (absolute coords, mm)
- *   [n_nodes*12 .. +n_shell*4]    float32  PEEQ per shell element
- *   [rest]                         float32  alive flag per shell element (1=alive)
- */
 import pako from 'pako';
 
 export async function loadFrame(url, manifest) {
@@ -17,15 +9,25 @@ export async function loadFrame(url, manifest) {
 
   const raw = pako.inflate(new Uint8Array(await resp.arrayBuffer()));
 
-  // Copy into a fresh ArrayBuffer to ensure alignment
-  const buf = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+  const posByteLen  = nNodes * 3 * 4;   // float32
+  const peeqByteLen = nShell     * 4;
+  const aliveByteLen= nShell     * 4;
 
-  const posByteLen  = nNodes * 3 * 4;
-  const peeqByteLen = nShell * 4;
+  const total = posByteLen + peeqByteLen + aliveByteLen;
+  if (raw.byteLength < total) {
+    throw new Error(
+      `Frame buffer too small: got ${raw.byteLength} bytes, expected ${total}`
+    );
+  }
 
-  const positions = new Float32Array(buf, 0,           nNodes * 3);
-  const peeq      = new Float32Array(buf, posByteLen,  nShell);
-  const alive     = new Float32Array(buf, posByteLen + peeqByteLen, nShell);
+  // slice → each gets its own aligned ArrayBuffer
+  const posBuf   = raw.buffer.slice(raw.byteOffset,                           raw.byteOffset + posByteLen);
+  const peeqBuf  = raw.buffer.slice(raw.byteOffset + posByteLen,              raw.byteOffset + posByteLen + peeqByteLen);
+  const aliveBuf = raw.buffer.slice(raw.byteOffset + posByteLen + peeqByteLen,raw.byteOffset + total);
 
-  return { positions, peeq, alive };
+  return {
+    positions: new Float32Array(posBuf),
+    peeq:      new Float32Array(peeqBuf),
+    alive:     new Float32Array(aliveBuf),
+  };
 }
