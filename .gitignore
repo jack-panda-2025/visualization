@@ -5,3 +5,16 @@ bin_output*/
 pointcloud_output/
 json_output/
 d3plot*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Editor
+.vscode/
+.claude/
+
+# Generated outputs
+output/
+analysis_result.png
