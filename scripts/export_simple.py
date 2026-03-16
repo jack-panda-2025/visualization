@@ -5,7 +5,7 @@ export_simple.py — 简化导出，优先跑通流程
 - zlib level-1 轻压缩
 - 绝对坐标（不做位移分离）
 """
-import json, zlib, numpy as np
+import json, numpy as np
 from pathlib import Path
 from lasso.dyna import D3plot, ArrayType
 
@@ -52,16 +52,15 @@ for out_idx, fi in enumerate(frames):
     peeq  = shell_peeq[fi, :, 0].astype(np.float32)           # 外表面 PEEQ
     alive = shell_alive[fi].astype(np.float32)
 
-    raw   = positions.tobytes() + peeq.tobytes() + alive.tobytes()
-    comp  = zlib.compress(raw, level=1)
+    raw = positions.tobytes() + peeq.tobytes() + alive.tobytes()
 
     out_path = OUT / f"frame_{out_idx:02d}.bin"
-    out_path.write_bytes(comp)
+    out_path.write_bytes(raw)
 
     print(f"  frame_{out_idx:02d}.bin  t={t[fi]:.4f}s  "
           f"pos[{positions.min():.0f}~{positions.max():.0f}]  "
           f"peeq_max={peeq.max():.4f}  "
-          f"{len(raw)//1024}KB → {len(comp)//1024}KB")
+          f"{len(raw)//1024}KB")
 
     frame_info.append({"index": out_idx, "time": float(t[fi]), "file": f"frame_{out_idx:02d}.bin"})
 
