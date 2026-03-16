@@ -14,10 +14,11 @@ __pycache__/
 # Editor
 .vscode/
 .claude/
+.DS_Store
 
 # Generated outputs
 output/
 analysis_result.png
 
-# Server local node_modules (self-contained, not tracked)
-server/node_modules/
+# Build
+frontend/dist/
