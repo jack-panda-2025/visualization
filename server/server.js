@@ -26,7 +26,6 @@ app.get('/api/metadata', (req, res) => {
   if (fs.existsSync(vtpMetaPath)) {
     const vtpMeta = JSON.parse(fs.readFileSync(vtpMetaPath));
     if (vtpMeta.n_pts_barrier) meta.n_pts_barrier = vtpMeta.n_pts_barrier;
-    if (vtpMeta.n_pts_body)    meta.n_pts_body    = vtpMeta.n_pts_body;
   }
   res.json(meta);
 });

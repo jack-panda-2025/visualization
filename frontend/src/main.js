@@ -12,7 +12,6 @@ const API = "http://localhost:3001";
 const VM_MAX = 699.0;
 let N_POINTS_SURFACE = 0;  // set from metadata.n_points after fetch
 let N_BARRIER_PTS = 0;
-let N_BODY_PTS    = 0;
 
 // ── vtk setup ──
 const container = document.getElementById("vtk-container");
@@ -92,9 +91,8 @@ let isPlaying     = false;
 let looping       = true;
 let playTimer     = null;
 let N_PC          = 0;
-let N_VEHICLE_PTS = 0;
-let barrierPd     = null;
-let vehiclePd     = null;
+let barrierPd = null;
+let vehiclePd = null;
 
 // ── UI refs ──
 const loadingEl    = document.getElementById("loading");
@@ -349,7 +347,6 @@ function splitVtpPolyData(initPd) {
   const vmAll     = initPd.getPointData().getArrayByName("von_mises").getData();
 
   const bodyStart = N_BARRIER_PTS;
-  const tireStart = N_BARRIER_PTS + N_BODY_PTS;
 
   const barrierPolys = [];
   const vehiclePolys = [];
@@ -433,17 +430,15 @@ async function main() {
   try {
     const res = await fetch(`${API}/api/metadata`);
     metadata = await res.json();
-    N_BARRIER_PTS = metadata.n_pts_barrier || 0;
-    N_BODY_PTS    = metadata.n_pts_body    || 0;
-    N_POINTS_SURFACE = metadata.n_points   || 0;
-    N_VEHICLE_PTS = N_POINTS_SURFACE - N_BARRIER_PTS;
+    N_BARRIER_PTS    = metadata.n_pts_barrier || 0;
+    N_POINTS_SURFACE = metadata.n_points     || 0;
     buildMarks();
   } catch (e) {
     ldetail.textContent = "ERROR: run node server/server.js first!";
     return;
   }
 
-  if (!N_BARRIER_PTS || !N_BODY_PTS || !N_POINTS_SURFACE) {
+  if (!N_BARRIER_PTS || !N_POINTS_SURFACE) {
     ldetail.textContent = "ERROR: metadata missing — re-run export_vtp_v2.py then export_binary_v2.py";
     return;
   }
