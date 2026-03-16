@@ -6,9 +6,14 @@ export default defineConfig({
     proxy: {},
   },
   optimizeDeps: {
-    // VTK.js must not be pre-bundled — it uses dynamic imports and
-    // conditional requires that break with esbuild pre-bundling.
+    // VTK.js itself must not be pre-bundled (dynamic imports / conditional
+    // requires break esbuild), but its CJS-only transitive deps must be
+    // pre-bundled so esbuild can synthesise an ESM default export for them.
     exclude: ['@kitware/vtk.js'],
+    include: ['globalthis', 'pako'],
+    esbuildOptions: {
+      target: 'esnext',
+    },
   },
   build: {
     target: 'esnext',
