@@ -3,10 +3,7 @@
  * Crash simulation viewer – VTK.js front-end.
  */
 
-import vtkRenderWindow               from '@kitware/vtk.js/Rendering/Core/RenderWindow';
-import vtkRenderer                   from '@kitware/vtk.js/Rendering/Core/Renderer';
-import vtkOpenGLRenderWindow         from '@kitware/vtk.js/Rendering/OpenGL/RenderWindow';
-import vtkRenderWindowInteractor     from '@kitware/vtk.js/Rendering/Core/RenderWindowInteractor';
+import vtkGenericRenderWindow        from '@kitware/vtk.js/Rendering/Misc/GenericRenderWindow';
 import vtkInteractorStyleTrackballCamera
   from '@kitware/vtk.js/Interaction/Style/InteractorStyleTrackballCamera';
 import vtkActor                      from '@kitware/vtk.js/Rendering/Core/Actor';
@@ -59,7 +56,6 @@ let ctf           = null;         // vtkColorTransferFunction
 let mapper        = null;
 let renderer      = null;
 let renderWindow  = null;
-let glWindow      = null;
 
 let isPlaying     = false;
 let currentFrameIdx = 0;          // integer frame index (0..n-1)
@@ -157,32 +153,26 @@ function avgNodeToCell(nodeMag, polydata) {
 // VTK pipeline setup
 // ─────────────────────────────────────────────────────────────────────────────
 function setupVTK(container) {
-  renderWindow = vtkRenderWindow.newInstance();
-  renderer     = vtkRenderer.newInstance({
+  // vtkGenericRenderWindow wires renderer + OpenGL view + interactor in the
+  // correct order internally, avoiding the traverse crash on empty pipelines.
+  const grw = vtkGenericRenderWindow.newInstance({
     background: [0.05, 0.05, 0.10],
   });
-  renderWindow.addRenderer(renderer);
+  grw.setContainer(container);
+  grw.resize();
 
-  glWindow = vtkOpenGLRenderWindow.newInstance();
-  glWindow.setContainer(container);
-  renderWindow.addView(glWindow);
+  renderer     = grw.getRenderer();
+  renderWindow = grw.getRenderWindow();
 
-  // Match canvas to container size.
-  // render() is intentionally omitted here — mapper has no data yet.
-  // Re-render is triggered by applyFrame() once data is loaded.
-  const resizeGL = () => {
-    glWindow.setSize(container.clientWidth, container.clientHeight);
-    if (mapper && mapper.getInputData && mapper.getInputData()) {
-      renderWindow.render();
-    }
-  };
-  window.addEventListener('resize', resizeGL);
-  resizeGL();
+  const interactor = grw.getInteractor();
+  interactor.setInteractorStyle(
+    vtkInteractorStyleTrackballCamera.newInstance()
+  );
 
-  // Actor / mapper — must exist before interactor.initialize() triggers render
-  mapper = vtkMapper.newInstance({
-    interpolateScalarsBeforeMapping: false,
-  });
+  window.addEventListener('resize', () => grw.resize());
+
+  // Mapper + actor
+  mapper = vtkMapper.newInstance({ interpolateScalarsBeforeMapping: false });
   mapper.setScalarModeToUseCellData();
   mapper.setScalarVisibility(true);
 
@@ -193,15 +183,6 @@ function setupVTK(container) {
   actor.getProperty().setSpecular(0.1);
 
   renderer.addActor(actor);
-
-  // Interactor — initialize() internally triggers a render; actor must exist
-  const interactor = vtkRenderWindowInteractor.newInstance();
-  interactor.setView(glWindow);
-  interactor.initialize();
-  interactor.bindEvents(container);
-
-  const style = vtkInteractorStyleTrackballCamera.newInstance();
-  interactor.setInteractorStyle(style);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
