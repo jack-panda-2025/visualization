@@ -57,7 +57,7 @@ barrierMapper.setResolveCoincidentTopologyPolygonOffsetParameters(4.0, 4.0);
 const barrierActor = vtkActor.newInstance();
 barrierActor.setMapper(barrierMapper);
 
-// ── 车身 pipeline（钢铁灰，平滑法线，双面渲染）──
+// ── 车辆 pipeline（车身+轮胎合并，钢铁灰，双面渲染）──
 const vehicleMapper = vtkMapper.newInstance({ interpolateScalarsBeforeMapping: false });
 vehicleMapper.setScalarVisibility(false);
 
@@ -66,18 +66,6 @@ vehicleActor.setMapper(vehicleMapper);
 vehicleActor.getProperty().setColor(0.55, 0.57, 0.58);
 vehicleActor.getProperty().setBackfaceCulling(false);
 vehicleActor.getProperty().setFrontfaceCulling(false);
-
-// ── 轮胎 pipeline（深灰，高 ambient 避免旋转法线错误导致变暗）──
-const tireMapper = vtkMapper.newInstance({ interpolateScalarsBeforeMapping: false });
-tireMapper.setScalarVisibility(false);
-
-const tireActor = vtkActor.newInstance();
-tireActor.setMapper(tireMapper);
-tireActor.getProperty().setColor(0.18, 0.18, 0.18);  // 轮胎黑
-tireActor.getProperty().setAmbient(0.7);              // 高 ambient：法线方向错误时也不会全黑
-tireActor.getProperty().setDiffuse(0.3);
-tireActor.getProperty().setBackfaceCulling(false);
-tireActor.getProperty().setFrontfaceCulling(false);
 
 // addActor 在 splitVtpPolyData() 之后执行，确保 mapper 有数据
 
@@ -107,7 +95,6 @@ let N_PC          = 0;
 let N_VEHICLE_PTS = 0;
 let barrierPd     = null;
 let vehiclePd     = null;
-let tirePd        = null;
 
 // ── UI refs ──
 const loadingEl    = document.getElementById("loading");
@@ -132,11 +119,9 @@ async function loadFrame(i) {
   const res = await fetch(`${API}/bin_v2/frame_${String(i).padStart(4, "0")}.bin`);
   const buf = await res.arrayBuffer();
   const all = new Float32Array(buf);
-  const bodyEnd = N_BARRIER_PTS + N_BODY_PTS;
   frameCache[i] = {
     barrierXyz: all.slice(0, N_BARRIER_PTS * 3),
-    vehicleXyz: all.slice(N_BARRIER_PTS * 3, bodyEnd * 3),
-    tireXyz:    all.slice(bodyEnd * 3, N_POINTS_SURFACE * 3),
+    vehicleXyz: all.slice(N_BARRIER_PTS * 3, N_POINTS_SURFACE * 3),
     barrierVm:  all.slice(N_POINTS_SURFACE * 3, N_POINTS_SURFACE * 3 + N_BARRIER_PTS),
   };
   return frameCache[i];
@@ -169,7 +154,7 @@ function updateUI(i, meta) {
 
 // ── show surface frame ──
 async function showSurfaceFrame(i) {
-  const { barrierXyz, vehicleXyz, tireXyz, barrierVm } = await loadFrame(i);
+  const { barrierXyz, vehicleXyz, barrierVm } = await loadFrame(i);
 
   barrierPd.getPoints().setData(barrierXyz);
   barrierPd.getPointData().getArrayByName("von_mises").setData(barrierVm);
@@ -179,10 +164,6 @@ async function showSurfaceFrame(i) {
   vehiclePd.getPoints().setData(vehicleXyz);
   vehiclePd.modified();
   vehicleMapper.modified();
-
-  tirePd.getPoints().setData(tireXyz);
-  tirePd.modified();
-  tireMapper.modified();
 
   renderer.resetCameraClippingRange();
   renderWindow.render();
@@ -227,7 +208,6 @@ function setViewMode(mode) {
   const isSurface = mode === "surface";
   barrierActor.setVisibility(isSurface);
   vehicleActor.setVisibility(isSurface);
-  tireActor.setVisibility(isSurface);
   pcActor.setVisibility(!isSurface);
   renderer.setBackground(isSurface ? [1, 1, 1] : [0.027, 0.043, 0.078]);
   btnMesh.classList.toggle("on", isSurface);
@@ -373,7 +353,6 @@ function splitVtpPolyData(initPd) {
 
   const barrierPolys = [];
   const vehiclePolys = [];
-  const tirePolys    = [];
   let offset = 0;
   while (offset < polysData.length) {
     const n        = polysData[offset];
@@ -381,14 +360,10 @@ function splitVtpPolyData(initPd) {
     if (firstIdx < bodyStart) {
       // barrier
       for (let k = 0; k <= n; k++) barrierPolys.push(polysData[offset + k]);
-    } else if (firstIdx < tireStart) {
-      // body
+    } else {
+      // body + tire 合并，统一偏移 -bodyStart
       vehiclePolys.push(n);
       for (let k = 1; k <= n; k++) vehiclePolys.push(polysData[offset + k] - bodyStart);
-    } else {
-      // tire
-      tirePolys.push(n);
-      for (let k = 1; k <= n; k++) tirePolys.push(polysData[offset + k] - tireStart);
     }
     offset += n + 1;
   }
@@ -405,22 +380,15 @@ function splitVtpPolyData(initPd) {
   barrierPd.getPointData().addArray(bVm);
   barrierPd.getPointData().setActiveScalars("von_mises");
 
-  // 车身 PolyData
+  // 车辆 PolyData（车身 + 轮胎合并）
   vehiclePd = vtkPolyData.newInstance();
-  vehiclePd.getPoints().setData(new Float32Array(allPoints.slice(bodyStart * 3, tireStart * 3)));
+  vehiclePd.getPoints().setData(new Float32Array(allPoints.slice(bodyStart * 3)));
   vehiclePd.getPolys().setData(new Uint32Array(vehiclePolys));
-
-  // 轮胎 PolyData
-  tirePd = vtkPolyData.newInstance();
-  tirePd.getPoints().setData(new Float32Array(allPoints.slice(tireStart * 3)));
-  tirePd.getPolys().setData(new Uint32Array(tirePolys));
 
   barrierMapper.setInputData(barrierPd);
   vehicleMapper.setInputData(vehiclePd);
-  tireMapper.setInputData(tirePd);
   renderer.addActor(barrierActor);
   renderer.addActor(vehicleActor);
-  renderer.addActor(tireActor);
 }
 
 // ── 初始化点云 ──
