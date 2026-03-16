@@ -1,231 +1,172 @@
 """
-D3plot → VTK.js 数据导出脚本
-
-输出结构:
-  output/
-  ├── geometry.vtp      静态几何：Shell 外表面节点 + 连接关系
-  ├── frame_00.bin      动态数据：Float16 位移 + PEEQ，zlib 压缩
-  ├── frame_01.bin
-  ├── ...
-  └── manifest.json     元数据：帧时间、scale/offset、节点数等
+export.py — 完整导出管线
+- 所有 55 帧
+- Shell（四边形→三角形）+ Solid 外表面（hex8→三角形）合并渲染
+- 仅存储表面节点坐标（Float32，绝对坐标），节省约 40% 空间
+- PEEQ Float32，alive Uint8
+- 每帧 zlib 压缩
+- 输出到 output/
 """
-
-import json
-import zlib
-import struct
+import json, zlib
 import numpy as np
 from pathlib import Path
 import pyvista as pv
 from lasso.dyna import D3plot, ArrayType
 
 ROOT = Path(__file__).resolve().parent.parent
+OUT  = ROOT / "output"
+OUT.mkdir(exist_ok=True)
 
-# ─── 配置 ────────────────────────────────────────────────────────────────────
-OUTPUT_DIR   = ROOT / "output"
-D3PLOT_PATH  = str(ROOT / "d3plot")
-TARGET_FRAMES = 30          # 目标抽帧数（自适应）
-MIN_PEEQ_CHANGE = 0.001     # 自适应抽帧：PEEQ 变化阈值
-
-OUTPUT_DIR.mkdir(exist_ok=True)
-
-# ─── 加载 ────────────────────────────────────────────────────────────────────
+# ── 加载 ───────────────────────────────────────────────────────────────────────
 print("Loading d3plot ...")
-d   = D3plot(D3PLOT_PATH)
+d   = D3plot(str(ROOT / "d3plot"))
 arr = d.arrays
 
-t             = arr[ArrayType.global_timesteps]            # (55,)
-node_coords   = arr[ArrayType.node_coordinates]            # (N_nodes, 3)
-node_disp     = arr[ArrayType.node_displacement]           # (55, N_nodes, 3)
-shell_conn    = arr[ArrayType.element_shell_node_indexes]  # (N_shell, 4)
-shell_peeq    = arr[ArrayType.element_shell_effective_plastic_strain]  # (55, N_shell, 3)
-shell_alive   = arr[ArrayType.element_shell_is_alive]      # (55, N_shell)
+t           = arr[ArrayType.global_timesteps]                               # (N_frames,)
+coords      = arr[ArrayType.node_coordinates]                               # (N_nodes, 3)
+node_disp   = arr[ArrayType.node_displacement]                              # (N_frames, N_nodes, 3) — absolute
+shell_conn  = arr[ArrayType.element_shell_node_indexes]                     # (N_shell, 4)
+shell_peeq  = arr[ArrayType.element_shell_effective_plastic_strain]         # (N_frames, N_shell, 3)
+shell_alive = arr[ArrayType.element_shell_is_alive]                         # (N_frames, N_shell)
+solid_conn  = arr[ArrayType.element_solid_node_indexes]                     # (N_solid, 8)
+solid_alive = arr[ArrayType.element_solid_is_alive]                         # (N_frames, N_solid)
 
-n_frames      = len(t)
-n_nodes       = node_coords.shape[0]
-n_shell       = shell_conn.shape[0]
+n_nodes  = coords.shape[0]
+n_shell  = shell_conn.shape[0]
+n_solid  = solid_conn.shape[0]
+n_frames = len(t)
 
-print(f"  Frames: {n_frames}, Nodes: {n_nodes:,}, Shell elements: {n_shell:,}")
+print(f"  Frames:{n_frames}  Nodes:{n_nodes:,}  Shell:{n_shell:,}  Solid:{n_solid:,}")
 
-# ─── Step 1: 自适应抽帧 ───────────────────────────────────────────────────────
-print("\nStep 1: Adaptive frame selection ...")
+is_absolute = np.allclose(coords[0], node_disp[0][0], atol=1.0)
+print(f"  node_displacement: {'ABSOLUTE' if is_absolute else 'RELATIVE (unexpected!)'}")
 
-peeq_outer = shell_peeq[:, :, 0]  # (55, N_shell)
+# ── Solid 外表面提取 ──────────────────────────────────────────────────────────
+print("\nExtracting solid outer surface ...")
 
-# 贪心算法：从首帧开始，当位移或 PEEQ 的累积变化超过阈值时才纳入下一帧
-disp_mag_per_frame = np.linalg.norm(node_disp, axis=2).max(axis=1)  # (55,)
-peeq_max_per_frame = peeq_outer.max(axis=1)                          # (55,)
+cells_flat = np.empty(n_solid * 9, dtype=np.int64)
+cells_flat[0::9] = 8
+for k in range(8):
+    cells_flat[k+1::9] = solid_conn[:, k]
+cell_types = np.full(n_solid, 12, dtype=np.uint8)   # VTK_HEXAHEDRON
 
-# 归一化到 [0,1]
-disp_norm = (disp_mag_per_frame - disp_mag_per_frame.min()) / (np.ptp(disp_mag_per_frame) + 1e-12)
-peeq_norm = (peeq_max_per_frame - peeq_max_per_frame.min()) / (np.ptp(peeq_max_per_frame) + 1e-12)
-change    = 0.6 * disp_norm + 0.4 * peeq_norm  # 综合变化量
+solid_mesh = pv.UnstructuredGrid(cells_flat, cell_types, coords.astype(np.float32))
+solid_surf = solid_mesh.extract_surface(algorithm='dataset_surface').triangulate()
 
-# 计算步长阈值使最终选帧数约等于 TARGET_FRAMES
-step_threshold = 1.0 / TARGET_FRAMES
+surf_pt_ids    = solid_surf.point_data.get("vtkOriginalPointIds")  # local → global node ID
+solid_cell_src = solid_surf.cell_data.get("vtkOriginalCellIds")    # surface tri → solid element idx
 
-selected = [0]
-accumulated = 0.0
-for i in range(1, n_frames):
-    accumulated += abs(change[i] - change[i - 1])
-    if accumulated >= step_threshold or i == n_frames - 1:
-        selected.append(i)
-        accumulated = 0.0
+n_solid_surf_tris = solid_surf.n_cells
+print(f"  Solid surface: {n_solid_surf_tris:,} tris  {solid_surf.n_points:,} points")
+if solid_cell_src is None:
+    print("  WARNING: vtkOriginalCellIds not found — solid alive set to 1")
 
-print(f"  Selected {len(selected)} frames from {n_frames}: {selected}")
+# ── 构建统一三角形连接关系 ────────────────────────────────────────────────────
+print("\nBuilding triangle connectivity ...")
 
-# ─── Step 2: 构建 Shell 外表面几何（PyVista） ─────────────────────────────────
-print("\nStep 2: Building shell surface geometry ...")
+def quads_to_tris(q):
+    q = np.asarray(q, dtype=np.int64)
+    t1 = q[:, [0, 1, 2]]
+    t2 = q[:, [0, 2, 3]]
+    return np.vstack([t1, t2])
 
-# 将 Shell 四边形连接关系转为 PyVista faces 格式 (每行: 4, n0, n1, n2, n3)
-faces_flat = np.hstack([
-    np.full((n_shell, 1), 4, dtype=np.int32),
-    shell_conn.astype(np.int32)
-]).ravel()
+# Shell：每个 quad → 2 tris
+shell_tris    = quads_to_tris(shell_conn)          # (N_shell*2, 3)
+shell_tri_src = np.tile(np.arange(n_shell), 2)     # tri i → shell element index
 
-mesh = pv.PolyData(node_coords.astype(np.float32), faces_flat)
+# Solid surface：local node IDs → global node IDs
+solid_faces_local = solid_surf.faces.reshape(n_solid_surf_tris, 4)[:, 1:4]
+if surf_pt_ids is not None:
+    solid_tris = surf_pt_ids[solid_faces_local].astype(np.int64)
+else:
+    solid_tris = solid_faces_local.astype(np.int64)
 
-# 提取外表面（去除内部重叠面，减少单元数）
-surface = mesh.extract_surface()
-print(f"  Shell mesh: {n_shell:,} quads → surface: {surface.n_cells:,} cells, {surface.n_points:,} points")
+all_tris     = np.vstack([shell_tris, solid_tris])
+n_tris       = len(all_tris)
+n_shell_tris = len(shell_tris)
+n_solid_tris = len(solid_tris)
+print(f"  Total: {n_tris:,} tris  (shell:{n_shell_tris:,}  solid:{n_solid_tris:,})")
 
-# 记录表面点映射（surface 有自己的点索引）
-surf_point_ids = surface.point_data.get("vtkOriginalPointIds")
-if surf_point_ids is None:
-    # 若无映射则用全量点
-    surf_point_ids = np.arange(n_nodes)
+# ── 压缩节点集：只保留表面用到的节点 ─────────────────────────────────────────
+surf_node_ids = np.unique(all_tris)          # 全局节点 ID，排序后
+n_surf_nodes  = len(surf_node_ids)
+print(f"  Surface nodes: {n_surf_nodes:,} / {n_nodes:,}")
 
-# 导出静态几何 VTP（仅坐标 + 连接关系，无标量）
-geo_path = OUTPUT_DIR / "geometry.vtp"
-surface_geo = pv.PolyData(surface.points, surface.faces)
-surface_geo.save(str(geo_path), binary=True)
-geo_size = geo_path.stat().st_size / 1024 / 1024
-print(f"  geometry.vtp saved: {geo_size:.1f} MB")
+# 全局 ID → 紧凑索引
+inv_map = np.empty(n_nodes, dtype=np.int32)
+inv_map[surf_node_ids] = np.arange(n_surf_nodes, dtype=np.int32)
 
-# ─── Step 3: 逐帧导出动态数据（Float16 + zlib） ───────────────────────────────
-print("\nStep 3: Exporting per-frame binary data ...")
+surf_tris = inv_map[all_tris].astype(np.int32)   # 紧凑连接关系
 
-# 预计算全局 displacement 和 PEEQ 的 scale/offset，用于 Float16 量化
-# 取所有选定帧的统计
-disp_selected = node_disp[selected]          # (n_sel, N_nodes, 3)
-peeq_selected = peeq_outer[selected]         # (n_sel, N_shell)
+# ── 保存静态文件 ──────────────────────────────────────────────────────────────
+(OUT / "connectivity.bin").write_bytes(surf_tris.tobytes())
+print(f"  connectivity.bin: {surf_tris.nbytes // 1024:,} KB")
 
-# 位移：以表面点为准
-surf_disp_all = disp_selected[:, surf_point_ids, :]  # (n_sel, N_surf_pts, 3)
-disp_min = float(surf_disp_all.min())
-disp_max = float(surf_disp_all.max())
-disp_scale  = (disp_max - disp_min) / 65535.0 if disp_max != disp_min else 1.0
-disp_offset = disp_min
+# ── 逐帧导出 ──────────────────────────────────────────────────────────────────
+print(f"\nExporting {n_frames} frames ...")
 
-# PEEQ
-peeq_min = float(peeq_selected.min())
-peeq_max = float(peeq_selected.max())
-peeq_scale  = (peeq_max - peeq_min) / 65535.0 if peeq_max != peeq_min else 1.0
-peeq_offset = peeq_min
-
+peeq_max_global = 0.0
 frame_info = []
-total_raw = 0
-total_compressed = 0
 
-for out_idx, frame_idx in enumerate(selected):
-    # --- 位移（表面点） ---
-    surf_disp = node_disp[frame_idx][surf_point_ids]  # (N_surf_pts, 3)
-    disp_u16  = np.clip(
-        ((surf_disp - disp_offset) / disp_scale), 0, 65535
-    ).astype(np.uint16)
+for fi in range(n_frames):
+    # 表面节点坐标（绝对，Float32）
+    positions = node_disp[fi, surf_node_ids, :].astype(np.float32)  # (N_surf_nodes, 3)
 
-    # --- PEEQ（需要映射到表面单元） ---
-    # surface 的单元对应原始 shell 的哪些？
-    # PyVista extract_surface 会保留 vtkOriginalCellIds
-    orig_cell_ids = surface.cell_data.get("vtkOriginalCellIds")
-    if orig_cell_ids is not None:
-        frame_peeq = peeq_outer[frame_idx][orig_cell_ids]
+    # PEEQ：shell tri → shell element 外表面值，solid tri → 0
+    peeq_shell      = shell_peeq[fi, :, 0].astype(np.float32)       # (N_shell,)
+    peeq_shell_tris = peeq_shell[shell_tri_src]                      # (N_shell*2,)
+    peeq_solid_tris = np.zeros(n_solid_tris, dtype=np.float32)
+    peeq_all        = np.concatenate([peeq_shell_tris, peeq_solid_tris])
+
+    # Alive：uint8，1=可见，0=已删除
+    alive_shell_tris = (shell_alive[fi][shell_tri_src] > 0.5).astype(np.uint8)
+    if solid_cell_src is not None:
+        alive_solid_tris = (solid_alive[fi][solid_cell_src] > 0.5).astype(np.uint8)
     else:
-        # fallback：用全部 shell peeq（截断到 surface 单元数）
-        frame_peeq = peeq_outer[frame_idx][:surface.n_cells]
+        alive_solid_tris = np.ones(n_solid_tris, dtype=np.uint8)
+    alive_all = np.concatenate([alive_shell_tris, alive_solid_tris])
 
-    peeq_u16 = np.clip(
-        ((frame_peeq - peeq_offset) / peeq_scale), 0, 65535
-    ).astype(np.uint16)
+    # 打包 + zlib 压缩
+    raw        = positions.tobytes() + peeq_all.tobytes() + alive_all.tobytes()
+    compressed = zlib.compress(raw, level=6)
+    (OUT / f"frame_{fi:02d}.bin").write_bytes(compressed)
 
-    # --- 单元存活标记（1bit → uint8） ---
-    if orig_cell_ids is not None:
-        alive_flag = shell_alive[frame_idx][orig_cell_ids].astype(np.uint8)
-    else:
-        alive_flag = shell_alive[frame_idx][:surface.n_cells].astype(np.uint8)
-    alive_packed = np.packbits(alive_flag > 0.5)  # bit-pack，进一步压缩
+    peeq_max = float(peeq_shell.max())
+    peeq_max_global = max(peeq_max_global, peeq_max)
 
-    # --- 打包：[disp_u16 | peeq_u16 | alive_packed] ---
-    raw_bytes = disp_u16.tobytes() + peeq_u16.tobytes() + alive_packed.tobytes()
-    compressed = zlib.compress(raw_bytes, level=6)
+    print(f"  frame_{fi:02d}.bin  t={t[fi]:.4f}s  peeq_max={peeq_max:.4f}"
+          f"  {len(raw)//1024:,}KB → {len(compressed)//1024:,}KB"
+          f"  ({100*len(compressed)//len(raw)}%)")
+    frame_info.append({"index": fi, "time": float(t[fi]), "file": f"frame_{fi:02d}.bin"})
 
-    out_path = OUTPUT_DIR / f"frame_{out_idx:02d}.bin"
-    out_path.write_bytes(compressed)
-
-    raw_kb  = len(raw_bytes) / 1024
-    comp_kb = len(compressed) / 1024
-    total_raw        += len(raw_bytes)
-    total_compressed += len(compressed)
-
-    frame_info.append({
-        "index":      out_idx,
-        "time":       float(t[frame_idx]),
-        "frame_idx":  int(frame_idx),
-        "file":       f"frame_{out_idx:02d}.bin",
-        "raw_bytes":  len(raw_bytes),
-        "comp_bytes": len(compressed),
-    })
-    print(f"  frame_{out_idx:02d}.bin  t={t[frame_idx]:.4f}s  "
-          f"{raw_kb:.0f}KB → {comp_kb:.0f}KB  "
-          f"({100*len(compressed)/len(raw_bytes):.0f}%)")
-
-# ─── Step 4: 写 manifest.json ────────────────────────────────────────────────
-print("\nStep 4: Writing manifest.json ...")
+# ── Manifest ──────────────────────────────────────────────────────────────────
+pos0 = node_disp[0, surf_node_ids, :]
 
 manifest = {
-    "version": 1,
-    "n_frames":      len(selected),
-    "n_surf_points": int(surface.n_points),
-    "n_surf_cells":  int(surface.n_cells),
-    "n_nodes_orig":  int(n_nodes),
-    "geometry_file": "geometry.vtp",
-    "encoding": {
-        "displacement": {
-            "dtype":  "uint16",
-            "shape":  [-1, 3],          # [N_surf_points, 3]
-            "scale":  disp_scale,
-            "offset": disp_offset,
-            "unit":   "mm",
-        },
-        "peeq": {
-            "dtype":  "uint16",
-            "shape":  [-1],             # [N_surf_cells]
-            "scale":  peeq_scale,
-            "offset": peeq_offset,
-        },
-        "alive": {
-            "dtype":   "uint8",
-            "bitpack": True,
-            "shape":   [-1],            # [N_surf_cells], bit-packed
-        },
+    "n_frames":     n_frames,
+    "n_surf_nodes": int(n_surf_nodes),
+    "n_tris":       int(n_tris),
+    "n_shell_tris": int(n_shell_tris),
+    "peeq_max":     peeq_max_global,
+    "bounds": {
+        "xmin": float(pos0[:,0].min()), "xmax": float(pos0[:,0].max()),
+        "ymin": float(pos0[:,1].min()), "ymax": float(pos0[:,1].max()),
+        "zmin": float(pos0[:,2].min()), "zmax": float(pos0[:,2].max()),
     },
     "frames": frame_info,
-    "stats": {
-        "total_raw_MB":        round(total_raw / 1024 / 1024, 2),
-        "total_compressed_MB": round(total_compressed / 1024 / 1024, 2),
-        "compression_ratio":   round(total_raw / total_compressed, 2),
-    },
 }
 
-manifest_path = OUTPUT_DIR / "manifest.json"
-manifest_path.write_text(json.dumps(manifest, indent=2))
+try:
+    manifest["energy"] = {
+        "times":    t.tolist(),
+        "kinetic":  arr[ArrayType.global_kinetic_energy].tolist(),
+        "internal": arr[ArrayType.global_internal_energy].tolist(),
+    }
+except Exception:
+    pass
 
-# ─── 汇总 ────────────────────────────────────────────────────────────────────
-print("\n=== Export Summary ===")
-print(f"  Output dir   : {OUTPUT_DIR.resolve()}")
-print(f"  Frames       : {len(selected)} / {n_frames}")
-print(f"  Surface pts  : {surface.n_points:,}  cells: {surface.n_cells:,}")
-print(f"  geometry.vtp : {geo_size:.1f} MB")
-print(f"  Frame data   : {total_raw/1024/1024:.1f} MB raw → "
-      f"{total_compressed/1024/1024:.1f} MB compressed")
-print(f"  Compression  : {total_raw/total_compressed:.1f}x")
-print(f"  manifest.json: written")
+(OUT / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+print(f"\n=== Done ===")
+print(f"  Output:   {OUT}")
+print(f"  peeq_max: {peeq_max_global:.4f}")

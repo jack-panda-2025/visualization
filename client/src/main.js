@@ -1,5 +1,5 @@
 /**
- * main.js — Crash simulation viewer (simplified pipeline)
+ * main.js — Crash simulation viewer
  *
  * Profile import MUST be first — registers VTK.js rendering pipeline.
  */
@@ -23,26 +23,27 @@ import { EnergyChart }               from './energyChart.js';
 const SERVER = 'http://localhost:3001/data';
 
 // ── DOM ───────────────────────────────────────────────────────────────────────
-const loadingScreen = document.getElementById('loading-screen');
-const loadingMsg    = document.getElementById('loading-message');
-const progressInner = document.getElementById('progress-bar-inner');
-const timeInfo      = document.getElementById('time-info');
-const energyCanvas  = document.getElementById('energy-canvas');
-const colorbarCanvas= document.getElementById('colorbar-gradient');
-const colorbarMin   = document.getElementById('colorbar-min');
-const colorbarMax   = document.getElementById('colorbar-max');
-const colorbarTitle = document.getElementById('colorbar-title');
-const btnFirst      = document.getElementById('btn-first');
-const btnPlay       = document.getElementById('btn-play');
-const btnLast       = document.getElementById('btn-last');
-const frameSlider   = document.getElementById('frame-slider');
-const speedSelect   = document.getElementById('speed-select');
-const fieldSelect   = document.getElementById('field-select');
+const loadingScreen  = document.getElementById('loading-screen');
+const loadingMsg     = document.getElementById('loading-message');
+const progressInner  = document.getElementById('progress-bar-inner');
+const timeInfo       = document.getElementById('time-info');
+const energyCanvas   = document.getElementById('energy-canvas');
+const colorbarCanvas = document.getElementById('colorbar-gradient');
+const colorbarMin    = document.getElementById('colorbar-min');
+const colorbarMax    = document.getElementById('colorbar-max');
+const colorbarTitle  = document.getElementById('colorbar-title');
+const btnFirst       = document.getElementById('btn-first');
+const btnPlay        = document.getElementById('btn-play');
+const btnLast        = document.getElementById('btn-last');
+const frameSlider    = document.getElementById('frame-slider');
+const speedSelect    = document.getElementById('speed-select');
+const fieldSelect    = document.getElementById('field-select');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let manifest     = null;
-let frameCache   = new Map();     // idx → { positions, peeq, alive }
-let connectivity = null;          // Int32Array flat triangle indices (3 per cell)
+let frameCache   = new Map();   // idx → { positions, peeq, alive }
+let loadingSet   = new Set();   // frames currently being fetched
+let connectivity = null;        // Int32Array flat tri indices (3 per tri)
 
 let renderer     = null;
 let renderWindow = null;
@@ -59,6 +60,7 @@ let playSpeed    = 1.0;
 let lastRAFTime  = null;
 let simElapsed   = 0;
 let energyChart  = null;
+let bgLoadDone   = false;       // true when all frames are in cache
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function setProgress(f, msg) {
@@ -68,7 +70,7 @@ function setProgress(f, msg) {
 
 function hideLoading() {
   loadingScreen.style.transition = 'opacity 0.4s';
-  loadingScreen.style.opacity = '0';
+  loadingScreen.style.opacity    = '0';
   setTimeout(() => loadingScreen.style.display = 'none', 420);
 }
 
@@ -86,11 +88,11 @@ function computeDispMag(positions, frame0positions) {
 
 function avgNodeToCell(nodeMag, nCells) {
   const cellMag = new Float32Array(nCells);
-  // connectivity: flat triangle indices, 3 values per cell
   for (let c = 0; c < nCells; c++) {
-    const base = c * 3;
-    cellMag[c] = (nodeMag[connectivity[base]]   + nodeMag[connectivity[base+1]] +
-                  nodeMag[connectivity[base+2]]) / 3;
+    const b = c * 3;
+    cellMag[c] = (nodeMag[connectivity[b]] +
+                  nodeMag[connectivity[b+1]] +
+                  nodeMag[connectivity[b+2]]) / 3;
   }
   return cellMag;
 }
@@ -122,16 +124,14 @@ function setupVTK(container) {
   renderer.addActor(actor);
 }
 
-// ── Build polydata from connectivity + positions ───────────────────────────────
+// ── Build VTK PolyData from positions + triangle connectivity ─────────────────
 function buildPolyData(positions) {
-  const nNodes = positions.length / 3;
-  const nCells = connectivity.length / 3;  // triangles: 3 indices per cell
+  const nCells = connectivity.length / 3;   // triangles
 
-  // Points
   const pts = vtkPoints.newInstance({ dataType: 'Float32Array' });
   pts.setData(positions, 3);
 
-  // Cells: VTK CellArray format [n0, i0, i1, i2,  n1, i0, i1, i2, ...]
+  // CellArray format: [3, i0, i1, i2,  3, i0, i1, i2, ...]
   const cellData = new Int32Array(nCells * 4);
   for (let c = 0; c < nCells; c++) {
     cellData[c*4]   = 3;
@@ -142,7 +142,6 @@ function buildPolyData(positions) {
   const polys = vtkCellArray.newInstance();
   polys.setData(cellData);
 
-  // Scalar array
   scalarArray = vtkDataArray.newInstance({
     name: 'Scalars', numberOfComponents: 1,
     values: new Float32Array(nCells),
@@ -152,27 +151,26 @@ function buildPolyData(positions) {
   pd.setPoints(pts);
   pd.setPolys(polys);
   pd.getCellData().setScalars(scalarArray);
-
   return pd;
 }
 
-// ── Apply frame ───────────────────────────────────────────────────────────────
+// ── Apply frame data to VTK scene ─────────────────────────────────────────────
 function applyFrame(idx) {
+  if (!frameCache.has(idx)) return;
   const { positions, peeq, alive } = frameCache.get(idx);
   const nCells = manifest.n_tris;
 
-  // Update point positions
+  // Update node positions
   polydata.getPoints().setData(positions, 3);
   polydata.getPoints().modified();
 
-  // Build cell scalars
-  let scalars;
-  let range;
+  // Build per-cell scalar array
+  let scalars, range;
 
   if (currentField === 'peeq') {
     scalars = new Float32Array(nCells);
     for (let i = 0; i < nCells; i++)
-      scalars[i] = alive[i] < 0.5 ? NaN : peeq[i];
+      scalars[i] = alive[i] === 0 ? NaN : peeq[i];
     range = [0, peeqMax || 1e-6];
   } else {
     const frame0pos = frameCache.get(0).positions;
@@ -180,7 +178,7 @@ function applyFrame(idx) {
     const cellMag   = avgNodeToCell(nodeMag, nCells);
     scalars = new Float32Array(nCells);
     for (let i = 0; i < nCells; i++)
-      scalars[i] = alive[i] < 0.5 ? NaN : cellMag[i];
+      scalars[i] = alive[i] === 0 ? NaN : cellMag[i];
     range = [0, dispMagMax || 1e-6];
   }
 
@@ -195,8 +193,10 @@ function applyFrame(idx) {
 
 // ── HUD ───────────────────────────────────────────────────────────────────────
 function updateHUD(idx) {
-  const t = manifest.frames[idx].time;
-  timeInfo.textContent = `t=${t.toFixed(4)}s  f=${idx+1}/${manifest.n_frames}`;
+  const t         = manifest.frames[idx].time;
+  const loaded    = frameCache.size;
+  const loadNote  = bgLoadDone ? '' : `  (${loaded}/${manifest.n_frames} loaded)`;
+  timeInfo.textContent = `t=${t.toFixed(4)}s  f=${idx+1}/${manifest.n_frames}${loadNote}`;
   frameSlider.value    = idx;
   if (energyChart) energyChart.setCurrentTime(t);
 }
@@ -217,10 +217,9 @@ function animStep(now) {
   const totalT = manifest.frames[manifest.n_frames - 1].time;
   if (simElapsed > totalT) simElapsed = 0;
 
-  // Find frame
   let fi = 0;
   for (let i = 0; i < manifest.n_frames - 1; i++) {
-    if (simElapsed >= manifest.frames[i].time) fi = i;
+    if (simElapsed >= manifest.frames[i].time && frameCache.has(i)) fi = i;
   }
   currentFrame = fi;
   applyFrame(fi);
@@ -248,8 +247,12 @@ function setupControls() {
     btnPlay.textContent = isPlaying ? '⏸' : '▶';
     if (isPlaying) { lastRAFTime = null; requestAnimationFrame(animStep); }
   });
-  btnFirst.addEventListener('click', () => { isPlaying = false; btnPlay.textContent = '▶'; jumpToFrame(0); });
-  btnLast.addEventListener('click',  () => { isPlaying = false; btnPlay.textContent = '▶'; jumpToFrame(manifest.n_frames - 1); });
+  btnFirst.addEventListener('click', () => {
+    isPlaying = false; btnPlay.textContent = '▶'; jumpToFrame(0);
+  });
+  btnLast.addEventListener('click', () => {
+    isPlaying = false; btnPlay.textContent = '▶'; jumpToFrame(manifest.n_frames - 1);
+  });
   frameSlider.max = manifest.n_frames - 1;
   frameSlider.addEventListener('input', () => {
     isPlaying = false; btnPlay.textContent = '▶';
@@ -263,6 +266,33 @@ function setupControls() {
   });
 }
 
+// ── Background load remaining frames ─────────────────────────────────────────
+async function backgroundLoad() {
+  const pos0 = frameCache.get(0).positions;
+  for (let i = 1; i < manifest.n_frames; i++) {
+    if (frameCache.has(i)) continue;
+    try {
+      const data = await loadFrame(`${SERVER}/${manifest.frames[i].file}`, manifest);
+      frameCache.set(i, data);
+
+      // Track running max PEEQ
+      for (const v of data.peeq) if (v > peeqMax) peeqMax = v;
+
+      // Track running dispMagMax
+      const mag = computeDispMag(data.positions, pos0);
+      for (const v of mag) if (v > dispMagMax) dispMagMax = v;
+
+      // Refresh colorbar range & current display when maximums grow
+      refreshColorbar();
+      updateHUD(currentFrame);
+    } catch (err) {
+      console.warn(`Failed to load frame ${i}:`, err);
+    }
+  }
+  bgLoadDone = true;
+  updateHUD(currentFrame);
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   try {
@@ -274,41 +304,24 @@ async function init() {
     setProgress(0.05, 'Loading connectivity…');
     const connResp = await fetch(`${SERVER}/connectivity.bin`);
     const connBuf  = await connResp.arrayBuffer();
-    connectivity   = new Int32Array(connBuf);   // flat triangle indices (3 per tri)
+    connectivity   = new Int32Array(connBuf);   // flat tri indices (3 per tri)
 
     setProgress(0.10, 'Setting up renderer…');
     setupVTK(document.getElementById('vtk-container'));
 
-    // Load all frames
-    for (let i = 0; i < manifest.n_frames; i++) {
-      setProgress(0.10 + (i / manifest.n_frames) * 0.85,
-        `Loading frame ${i+1}/${manifest.n_frames}…`);
-      const data = await loadFrame(`${SERVER}/${manifest.frames[i].file}`, manifest);
-      frameCache.set(i, data);
-
-      // Track global maxima
-      for (const v of data.peeq) if (v > peeqMax) peeqMax = v;
-    }
+    // Load only frame 0 up front — show viewer immediately
+    setProgress(0.50, 'Loading frame 0…');
+    const frame0 = await loadFrame(`${SERVER}/${manifest.frames[0].file}`, manifest);
+    frameCache.set(0, frame0);
+    for (const v of frame0.peeq) if (v > peeqMax) peeqMax = v;
     peeqMax = manifest.peeq_max || peeqMax;
 
-    // Compute dispMagMax from frame 0 vs last frame
-    const pos0  = frameCache.get(0).positions;
-    const posN  = frameCache.get(manifest.n_frames - 1).positions;
-    const magN  = computeDispMag(posN, pos0);
-    for (const v of magN) if (v > dispMagMax) dispMagMax = v;
-
-    setProgress(0.97, 'Building scene…');
-
-    // Build VTK polydata from frame 0
-    polydata = buildPolyData(frameCache.get(0).positions);
+    setProgress(0.95, 'Building scene…');
+    polydata = buildPolyData(frame0.positions);
     mapper.setInputData(polydata);
 
-    // Colormap
     refreshColorbar();
-
-    // Energy chart
     energyChart = new EnergyChart(energyCanvas, manifest.energy || null);
-
     setupControls();
 
     setProgress(1.0, 'Done.');
@@ -316,6 +329,9 @@ async function init() {
     renderer.resetCamera();
     renderWindow.render();
     hideLoading();
+
+    // Load remaining frames in the background
+    backgroundLoad();
 
   } catch (err) {
     loadingMsg.textContent         = `❌ ${err.message}`;
