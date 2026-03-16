@@ -167,12 +167,14 @@ function setupVTK(container) {
   glWindow.setContainer(container);
   renderWindow.addView(glWindow);
 
-  // Match canvas to container size
+  // Match canvas to container size.
+  // render() is intentionally omitted here — mapper has no data yet.
+  // Re-render is triggered by applyFrame() once data is loaded.
   const resizeGL = () => {
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    glWindow.setSize(w, h);
-    renderWindow.render();
+    glWindow.setSize(container.clientWidth, container.clientHeight);
+    if (mapper && mapper.getInputData && mapper.getInputData()) {
+      renderWindow.render();
+    }
   };
   window.addEventListener('resize', resizeGL);
   resizeGL();
