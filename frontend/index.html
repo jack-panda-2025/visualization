@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Road Barrier FE Visualization</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Barlow+Condensed:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0b0f14;
+        --surface: #111820;
+        --border: #1e2d3d;
+        --accent: #e8f04a;
+        --hot: #ff3c1f;
+        --cold: #1a6fff;
+        --text: #7a9bb5;
+        --bright: #c8dff0;
+        --dim: #3a5060;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        font-family: "DM Mono", monospace;
+      }
+
+      #layout {
+        display: grid;
+        grid-template-rows: 48px 1fr 100px;
+        grid-template-columns: 220px 1fr 200px;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      /* HEADER */
+      header {
+        grid-column: 1/-1;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        padding: 0 20px;
+        gap: 20px;
+      }
+      .logo {
+        font-family: "Barlow Condensed", sans-serif;
+        font-weight: 700;
+        font-size: 20px;
+        letter-spacing: 3px;
+        color: var(--accent);
+      }
+      .logo span {
+        color: var(--bright);
+        font-weight: 300;
+      }
+      .hbar {
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+      .hstat {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 1px;
+      }
+      .hstat-l {
+        font-size: 9px;
+        letter-spacing: 2px;
+        color: var(--dim);
+        text-transform: uppercase;
+      }
+      .hstat-v {
+        font-size: 14px;
+        color: var(--accent);
+      }
+      .hstat-v.hot {
+        color: var(--hot);
+      }
+      #dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 8px var(--accent);
+        animation: blink 1.8s ease-in-out infinite;
+      }
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.2;
+        }
+      }
+
+      /* LEFT */
+      .left {
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        padding: 14px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        overflow-y: auto;
+      }
+      .plabel {
+        font-size: 9px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: var(--dim);
+        margin-bottom: 4px;
+      }
+      .irow {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .ikey {
+        font-size: 10px;
+        color: var(--text);
+      }
+      .ival {
+        font-size: 11px;
+        color: var(--bright);
+      }
+      .ival.hot {
+        color: var(--hot);
+      }
+      .ival.yellow {
+        color: var(--accent);
+      }
+      .cb-grad {
+        width: 100%;
+        height: 14px;
+        border-radius: 2px;
+        background: linear-gradient(
+          to right,
+          #1a6fff,
+          #00cfff,
+          #00ff9d,
+          #aaff00,
+          #ffee00,
+          #ff8800,
+          #ff3c1f
+        );
+        border: 1px solid var(--border);
+      }
+      .cb-ticks {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 2px;
+      }
+      .cb-tick {
+        font-size: 9px;
+        color: var(--dim);
+      }
+      .cb-tick.hot {
+        color: var(--hot);
+      }
+      .cb-tick.cold {
+        color: var(--cold);
+      }
+
+      /* VIEWPORT */
+      .viewport {
+        position: relative;
+        overflow: hidden;
+        background: #f0f0f0;
+      }
+      #vtk-container {
+        position: absolute;
+        inset: 0;
+      }
+      #time-badge {
+        position: absolute;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 11px;
+        letter-spacing: 3px;
+        color: var(--accent);
+        background: rgba(7, 11, 16, 0.85);
+        padding: 4px 16px;
+        border: 1px solid var(--border);
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      .corner {
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        border-color: var(--dim);
+        border-style: solid;
+        opacity: 0.4;
+        pointer-events: none;
+      }
+      .c-tl {
+        top: 12px;
+        left: 12px;
+        border-width: 1px 0 0 1px;
+      }
+      .c-tr {
+        top: 12px;
+        right: 12px;
+        border-width: 1px 1px 0 0;
+      }
+      .c-bl {
+        bottom: 12px;
+        left: 12px;
+        border-width: 0 0 1px 1px;
+      }
+      .c-br {
+        bottom: 12px;
+        right: 12px;
+        border-width: 0 1px 1px 0;
+      }
+      #loading {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        background: #070b10;
+        z-index: 10;
+        transition: opacity 0.4s;
+      }
+      #loading.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .spinner {
+        width: 36px;
+        height: 36px;
+        border: 2px solid var(--border);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .ltxt {
+        font-size: 11px;
+        letter-spacing: 3px;
+        color: var(--dim);
+      }
+      #ldetail {
+        font-size: 10px;
+        color: var(--text);
+      }
+
+      /* RIGHT */
+      .right {
+        background: var(--surface);
+        border-left: 1px solid var(--border);
+        padding: 14px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      #chart-vm {
+        width: 100%;
+        flex: 1;
+        display: block;
+      }
+
+      /* TIMELINE */
+      .timeline {
+        grid-column: 1/-1;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        padding: 10px 20px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .tl-top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .tl-lbl {
+        font-size: 9px;
+        letter-spacing: 3px;
+        color: var(--dim);
+        text-transform: uppercase;
+        flex-shrink: 0;
+      }
+      .controls {
+        display: flex;
+        gap: 6px;
+        margin-left: auto;
+        align-items: center;
+      }
+      .btn {
+        width: 30px;
+        height: 30px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s;
+        font-family: inherit;
+      }
+      .btn:hover,
+      .btn.on {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: rgba(232, 240, 74, 0.06);
+      }
+      select.spd {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-family: "DM Mono", monospace;
+        font-size: 10px;
+        padding: 4px 8px;
+        cursor: pointer;
+        height: 30px;
+      }
+      .tl-track {
+        position: relative;
+        height: 28px;
+      }
+      .tl-bg {
+        position: absolute;
+        top: 10px;
+        left: 0;
+        right: 0;
+        height: 8px;
+        background: var(--border);
+        border-radius: 1px;
+        overflow: hidden;
+      }
+      .tl-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--cold), var(--accent));
+        transition: width 0.05s;
+      }
+      .tl-input {
+        position: absolute;
+        top: 6px;
+        left: 0;
+        right: 0;
+        height: 16px;
+        opacity: 0;
+        cursor: pointer;
+        width: 100%;
+        z-index: 5;
+      }
+      .tl-thumb {
+        position: absolute;
+        top: 0;
+        width: 14px;
+        height: 28px;
+        transform: translateX(-50%);
+        pointer-events: none;
+      }
+      .tl-thumb::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 8px var(--accent);
+        border: 2px solid var(--bg);
+      }
+      .tl-marks {
+        display: flex;
+        justify-content: space-between;
+      }
+      .tl-mark {
+        font-size: 9px;
+        color: var(--dim);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="layout">
+      <header>
+        <div id="dot"></div>
+        <div class="logo">FE<span>VIZ</span> · Road Barrier Analysis</div>
+        <div class="hbar"></div>
+        <div class="hstat">
+          <div class="hstat-l">Case</div>
+          <div class="hstat-v">T_lok_F_shape_9_3_100km</div>
+        </div>
+        <div class="hstat">
+          <div class="hstat-l">Frame</div>
+          <div class="hstat-v" id="h-frame">— / —</div>
+        </div>
+        <div class="hstat">
+          <div class="hstat-l">Time</div>
+          <div class="hstat-v" id="h-time">— s</div>
+        </div>
+        <div class="hstat">
+          <div class="hstat-l">VM Max</div>
+          <div class="hstat-v hot" id="h-vmmax">— MPa</div>
+        </div>
+      </header>
+
+      <div class="left">
+        <div>
+          <div class="plabel">// Model Info</div>
+          <div class="irow">
+            <span class="ikey">Nodes</span><span class="ival">1,777,011</span>
+          </div>
+          <div class="irow">
+            <span class="ikey">Solid elements</span
+            ><span class="ival">825,280</span>
+          </div>
+          <div class="irow">
+            <span class="ikey">Shell elements</span
+            ><span class="ival">768,288</span>
+          </div>
+          <div class="irow">
+            <span class="ikey">Frames</span
+            ><span class="ival yellow" id="l-frames">0 / 55</span>
+          </div>
+          <div class="irow">
+            <span class="ikey">Duration</span
+            ><span class="ival">0 – 0.998 s</span>
+          </div>
+        </div>
+        <div>
+          <div class="plabel">// Von Mises Stress</div>
+          <div class="irow">
+            <span class="ikey">Global max</span
+            ><span class="ival hot">699.0 MPa</span>
+          </div>
+          <div class="irow">
+            <span class="ikey">Frame max</span
+            ><span class="ival hot" id="l-fmax">— MPa</span>
+          </div>
+          <div class="irow">
+            <span class="ikey">Yield (est.)</span
+            ><span class="ival">~350 MPa</span>
+          </div>
+        </div>
+        <div>
+          <div class="plabel">// View Mode</div>
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <button class="btn on" id="btn-mesh"
+              style="flex:1;width:auto;font-size:10px;letter-spacing:1px;">MESH</button>
+            <button class="btn" id="btn-particles"
+              style="flex:1;width:auto;font-size:10px;letter-spacing:1px;" disabled>PARTICLES</button>
+          </div>
+        </div>
+        <div>
+          <div class="plabel">// Stress Scale (MPa)</div>
+          <div class="cb-grad"></div>
+          <div class="cb-ticks">
+            <span class="cb-tick cold">0</span>
+            <span class="cb-tick">57</span>
+            <span class="cb-tick">114</span>
+            <span class="cb-tick">171</span>
+            <span class="cb-tick hot">228</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="viewport">
+        <div id="vtk-container"></div>
+        <div id="loading">
+          <div class="spinner"></div>
+          <div class="ltxt">Initializing</div>
+          <div id="ldetail">loading...</div>
+        </div>
+        <div class="corner c-tl"></div>
+        <div class="corner c-tr"></div>
+        <div class="corner c-bl"></div>
+        <div class="corner c-br"></div>
+        <div id="time-badge">T = 0.000 s</div>
+      </div>
+
+      <div class="right">
+        <div class="plabel">// VM Peak / Frame</div>
+        <canvas id="chart-vm"></canvas>
+      </div>
+
+      <div class="timeline">
+        <div class="tl-top">
+          <div class="tl-lbl">// Timeline</div>
+          <div class="controls">
+            <button class="btn" id="btn-rew">⏮</button>
+            <button class="btn" id="btn-play">▶</button>
+            <button class="btn" id="btn-fwd">⏭</button>
+            <button class="btn on" id="btn-loop">↺</button>
+            <select class="spd" id="spd">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+            </select>
+          </div>
+        </div>
+        <div class="tl-track">
+          <div class="tl-bg">
+            <div class="tl-fill" id="tl-fill" style="width: 0%"></div>
+          </div>
+          <div class="tl-thumb" id="tl-thumb" style="left: 0%"></div>
+          <input
+            type="range"
+            class="tl-input"
+            id="tl-range"
+            min="0"
+            max="54"
+            value="0"
+            step="1"
+          />
+        </div>
+        <div class="tl-marks" id="tl-marks"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
