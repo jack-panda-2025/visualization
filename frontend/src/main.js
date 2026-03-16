@@ -10,98 +10,86 @@ import vtkDataArray from "@kitware/vtk.js/Common/Core/DataArray";
 
 const API = "http://localhost:3001";
 const VM_MAX = 699.0;
-let N_POINTS_SURFACE = 0;  // set from metadata.n_points after fetch
-let N_BARRIER_PTS = 0;
 
-// ── vtk setup ──
-const container = document.getElementById("vtk-container");
+// ── VTK setup ──────────────────────────────────────────────────────────────
 const fullScreen = vtkFullScreenRenderWindow.newInstance({
-  rootContainer: container,
-  background: [1.0, 1.0, 1.0],
+  rootContainer: document.getElementById("vtk-container"),
+  background: [1, 1, 1],
 });
 const renderer     = fullScreen.getRenderer();
 const renderWindow = fullScreen.getRenderWindow();
 const interactor   = fullScreen.getInteractor();
 interactor.setInteractorStyle(vtkInteractorStyleTrackballCamera.newInstance());
 
-// ── colormap（应力色表）──
-const ctf = vtkColorTransferFunction.newInstance();
-ctf.addRGBPoint(0,   0.30, 0.35, 0.55);
-ctf.addRGBPoint(15,  0.10, 0.40, 0.90);
-ctf.addRGBPoint(50,  0.00, 0.85, 0.85);
-ctf.addRGBPoint(100, 0.10, 0.90, 0.10);
-ctf.addRGBPoint(160, 1.00, 0.75, 0.00);
-ctf.addRGBPoint(228, 1.00, 0.00, 0.00);
+// ── Colormaps ──────────────────────────────────────────────────────────────
+const barrierCtf = vtkColorTransferFunction.newInstance();
+barrierCtf.addRGBPoint(0,   0.10, 0.30, 0.80);
+barrierCtf.addRGBPoint(50,  0.00, 0.85, 0.85);
+barrierCtf.addRGBPoint(100, 0.10, 0.90, 0.10);
+barrierCtf.addRGBPoint(160, 1.00, 0.75, 0.00);
+barrierCtf.addRGBPoint(228, 1.00, 0.00, 0.00);
 
-// 粒子 colormap
 const pcCtf = vtkColorTransferFunction.newInstance();
 pcCtf.addRGBPoint(0,   0.15, 0.30, 0.70);
-pcCtf.addRGBPoint(10,  0.10, 0.55, 1.00);
 pcCtf.addRGBPoint(50,  0.00, 0.95, 0.80);
 pcCtf.addRGBPoint(100, 0.40, 1.00, 0.00);
 pcCtf.addRGBPoint(160, 1.00, 0.85, 0.00);
 pcCtf.addRGBPoint(228, 1.00, 0.15, 0.00);
 
-// ── 护栏 pipeline（应力着色）──
+// ── Actors ─────────────────────────────────────────────────────────────────
+// Barrier: von Mises colored
 const barrierMapper = vtkMapper.newInstance({ interpolateScalarsBeforeMapping: true });
-barrierMapper.setLookupTable(ctf);
+barrierMapper.setLookupTable(barrierCtf);
 barrierMapper.setScalarRange(0, 228);
 barrierMapper.setScalarVisibility(true);
 barrierMapper.setScalarModeToUsePointFieldData();
 barrierMapper.setColorByArrayName("von_mises");
-// 向后偏移，防止与车辆面片 z-fighting
-barrierMapper.setResolveCoincidentTopologyToPolygonOffset();
-barrierMapper.setResolveCoincidentTopologyPolygonOffsetParameters(4.0, 4.0);
-
 const barrierActor = vtkActor.newInstance();
 barrierActor.setMapper(barrierMapper);
 
-// ── 车辆 pipeline（车身+轮胎合并，钢铁灰，双面渲染）──
+// Vehicle: solid grey, body + tires combined
 const vehicleMapper = vtkMapper.newInstance({ interpolateScalarsBeforeMapping: false });
 vehicleMapper.setScalarVisibility(false);
-
 const vehicleActor = vtkActor.newInstance();
 vehicleActor.setMapper(vehicleMapper);
 vehicleActor.getProperty().setColor(0.55, 0.57, 0.58);
 vehicleActor.getProperty().setBackfaceCulling(false);
 vehicleActor.getProperty().setFrontfaceCulling(false);
 
-// addActor 在 splitVtpPolyData() 之后执行，确保 mapper 有数据
-
-// ── 点云 pipeline ──
+// Point cloud
 const pcMapper = vtkMapper.newInstance({ interpolateScalarsBeforeMapping: true });
 pcMapper.setLookupTable(pcCtf);
 pcMapper.setScalarRange(0, 228);
 pcMapper.setScalarVisibility(true);
 pcMapper.setScalarModeToUsePointFieldData();
 pcMapper.setColorByArrayName("von_mises");
-
 const pcActor = vtkActor.newInstance();
 pcActor.setMapper(pcMapper);
 pcActor.getProperty().setPointSize(5);
 
-// ── state ──
-let metadata    = null;
-let pcMetadata  = null;
-let frameCache    = {};
-let pcFrameCache  = {};
-let currentFrame  = 0;
-let viewMode      = "surface";
-let isPlaying     = false;
-let looping       = true;
-let playTimer     = null;
-let N_PC          = 0;
-let barrierPd = null;
-let vehiclePd = null;
+// ── State ──────────────────────────────────────────────────────────────────
+let metadata    = null;   // surface metadata
+let pcMetadata  = null;   // point cloud metadata
+let N_TOTAL     = 0;      // total points in surface binary
+let N_BARRIER   = 0;      // barrier points (first N_BARRIER in binary)
+let frameCache  = {};
+let pcCache     = {};
+let currentFrame = 0;
+let viewMode    = "surface";
+let isPlaying   = false;
+let looping     = true;
+let playTimer   = null;
+let barrierPd   = null;
+let vehiclePd   = null;
 
-// ── UI refs ──
+// ── UI refs ────────────────────────────────────────────────────────────────
 const loadingEl    = document.getElementById("loading");
 const ldetail      = document.getElementById("ldetail");
 const hFrame       = document.getElementById("h-frame");
 const hTime        = document.getElementById("h-time");
 const hVmmax       = document.getElementById("h-vmmax");
-const lFrames      = document.getElementById("l-frames");
 const lFmax        = document.getElementById("l-fmax");
+const lFrames      = document.getElementById("l-frames");
 const timeBadge    = document.getElementById("time-badge");
 const tlFill       = document.getElementById("tl-fill");
 const tlThumb      = document.getElementById("tl-thumb");
@@ -111,32 +99,78 @@ const btnLoop      = document.getElementById("btn-loop");
 const btnMesh      = document.getElementById("btn-mesh");
 const btnParticles = document.getElementById("btn-particles");
 
-// ── load surface frame ──
+// ── Binary loaders ─────────────────────────────────────────────────────────
+// Binary layout: [xyz: N_TOTAL*3 float32] [vm: N_TOTAL float32]
+// Point order:   [barrier: 0..N_BARRIER-1] [vehicle: N_BARRIER..N_TOTAL-1]
 async function loadFrame(i) {
   if (frameCache[i]) return frameCache[i];
-  const res = await fetch(`${API}/bin_v2/frame_${String(i).padStart(4, "0")}.bin`);
-  const buf = await res.arrayBuffer();
+  const buf = await fetch(`${API}/bin_v2/frame_${String(i).padStart(4, "0")}.bin`)
+    .then(r => r.arrayBuffer());
   const all = new Float32Array(buf);
   frameCache[i] = {
-    barrierXyz: all.slice(0, N_BARRIER_PTS * 3),
-    vehicleXyz: all.slice(N_BARRIER_PTS * 3, N_POINTS_SURFACE * 3),
-    barrierVm:  all.slice(N_POINTS_SURFACE * 3, N_POINTS_SURFACE * 3 + N_BARRIER_PTS),
+    barrierXyz: all.slice(0, N_BARRIER * 3),
+    vehicleXyz: all.slice(N_BARRIER * 3, N_TOTAL * 3),
+    barrierVm:  all.slice(N_TOTAL * 3, N_TOTAL * 3 + N_BARRIER),
   };
   return frameCache[i];
 }
 
-// ── load point cloud frame ──
 async function loadPcFrame(i) {
-  if (pcFrameCache[i]) return pcFrameCache[i];
-  const res = await fetch(`${API}/pointcloud/frame_${String(i).padStart(4, "0")}.bin`);
-  const buf = await res.arrayBuffer();
+  if (pcCache[i]) return pcCache[i];
+  const buf = await fetch(`${API}/pointcloud/frame_${String(i).padStart(4, "0")}.bin`)
+    .then(r => r.arrayBuffer());
   const all = new Float32Array(buf);
-  pcFrameCache[i] = { points: all.slice(0, N_PC * 3), vm: all.slice(N_PC * 3) };
-  return pcFrameCache[i];
+  const n = pcMetadata.n_points;
+  pcCache[i] = { xyz: all.slice(0, n * 3), vm: all.slice(n * 3) };
+  return pcCache[i];
 }
 
-// ── UI update ──
-function updateUI(i, meta) {
+// ── Render frames ──────────────────────────────────────────────────────────
+async function showSurfaceFrame(i) {
+  const { barrierXyz, vehicleXyz, barrierVm } = await loadFrame(i);
+
+  barrierPd.getPoints().setData(barrierXyz, 3);
+  barrierPd.getPointData().getArrayByName("von_mises").setData(barrierVm);
+  barrierPd.modified();
+  barrierMapper.modified();
+
+  vehiclePd.getPoints().setData(vehicleXyz, 3);
+  vehiclePd.modified();
+  vehicleMapper.modified();
+
+  renderer.resetCameraClippingRange();
+  renderWindow.render();
+
+  // Prefetch next frames
+  for (let k = 1; k <= 3; k++) {
+    if (i + k < metadata.n_frames) loadFrame(i + k).catch(() => {});
+  }
+}
+
+async function showPcFrame(i) {
+  const { xyz, vm } = await loadPcFrame(i);
+  const pd = pcMapper.getInputData();
+  pd.getPoints().setData(xyz, 3);
+  pd.getPointData().getArrayByName("von_mises").setData(vm);
+  pd.modified();
+  pcMapper.modified();
+  renderer.resetCameraClippingRange();
+  renderWindow.render();
+
+  for (let k = 1; k <= 3; k++) {
+    if (i + k < pcMetadata.n_frames) loadPcFrame(i + k).catch(() => {});
+  }
+}
+
+async function showFrame(i) {
+  if (viewMode === "surface") await showSurfaceFrame(i);
+  else await showPcFrame(i);
+  updateUI(i);
+}
+
+// ── UI updates ─────────────────────────────────────────────────────────────
+function updateUI(i) {
+  const meta  = viewMode === "surface" ? metadata : pcMetadata;
   const frame = meta.frames[i];
   const pct   = (i / (meta.n_frames - 1)) * 100;
   hFrame.textContent    = `${i + 1} / ${meta.n_frames}`;
@@ -150,55 +184,6 @@ function updateUI(i, meta) {
   drawChart(i);
 }
 
-// ── show surface frame ──
-async function showSurfaceFrame(i) {
-  const { barrierXyz, vehicleXyz, barrierVm } = await loadFrame(i);
-
-  barrierPd.getPoints().setData(barrierXyz);
-  barrierPd.getPointData().getArrayByName("von_mises").setData(barrierVm);
-  barrierPd.modified();
-  barrierMapper.modified();
-
-  vehiclePd.getPoints().setData(vehicleXyz);
-  vehiclePd.modified();
-  vehicleMapper.modified();
-
-  renderer.resetCameraClippingRange();
-  renderWindow.render();
-
-  for (let k = 1; k <= 5; k++) {
-    if (i + k < metadata.n_frames) loadFrame(i + k).catch(() => {});
-  }
-}
-
-// ── show point cloud frame ──
-async function showPcFrame(i) {
-  const { points, vm } = await loadPcFrame(i);
-  const pd = pcMapper.getInputData();
-  pd.getPoints().setData(points, 3);
-  pd.getPointData().getArrayByName("von_mises").setData(vm);
-  pd.modified();
-  pcMapper.modified();
-  renderer.resetCameraClippingRange();
-  renderWindow.render();
-
-  for (let k = 1; k <= 5; k++) {
-    if (i + k < pcMetadata.n_frames) loadPcFrame(i + k).catch(() => {});
-  }
-}
-
-// ── unified showFrame ──
-async function showFrame(i) {
-  if (viewMode === "surface") {
-    await showSurfaceFrame(i);
-    updateUI(i, metadata);
-  } else {
-    await showPcFrame(i);
-    updateUI(i, pcMetadata);
-  }
-}
-
-// ── view mode toggle ──
 function setViewMode(mode) {
   if (mode === viewMode) return;
   if (mode === "particles" && !pcMetadata) return;
@@ -213,17 +198,17 @@ function setViewMode(mode) {
   showFrame(currentFrame);
 }
 
-btnMesh.addEventListener("click",      () => setViewMode("surface"));
+btnMesh.addEventListener("click", () => setViewMode("surface"));
 btnParticles.addEventListener("click", () => setViewMode("particles"));
 
-// ── timeline ──
+// ── Timeline ───────────────────────────────────────────────────────────────
 function buildMarks() {
   const el = document.getElementById("tl-marks");
   el.innerHTML = "";
   for (let k = 0; k <= 6; k++) {
     const idx = Math.round((k / 6) * (metadata.n_frames - 1));
-    const d   = document.createElement("div");
-    d.className   = "tl-mark";
+    const d = document.createElement("div");
+    d.className = "tl-mark";
     d.textContent = metadata.frames[idx].time.toFixed(3) + "s";
     el.appendChild(d);
   }
@@ -234,7 +219,7 @@ tlRange.addEventListener("input", () => {
   showFrame(currentFrame);
 });
 
-// ── playback ──
+// ── Playback ───────────────────────────────────────────────────────────────
 function togglePlay() {
   isPlaying = !isPlaying;
   btnPlay.textContent = isPlaying ? "⏸" : "▶";
@@ -245,15 +230,12 @@ function togglePlay() {
 
 function scheduleNext() {
   if (!isPlaying) return;
-  const spd   = parseFloat(document.getElementById("spd").value);
-  const delay = Math.round(100 / spd);
+  const delay = Math.round(100 / parseFloat(document.getElementById("spd").value));
   playTimer = setTimeout(async () => {
+    const meta = viewMode === "surface" ? metadata : pcMetadata;
     currentFrame++;
-    const total = viewMode === "surface"
-      ? metadata.n_frames
-      : (pcMetadata?.n_frames ?? metadata.n_frames);
-    if (currentFrame >= total) {
-      currentFrame = looping ? 0 : total - 1;
+    if (currentFrame >= meta.n_frames) {
+      currentFrame = looping ? 0 : meta.n_frames - 1;
       if (!looping) { togglePlay(); return; }
     }
     await showFrame(currentFrame);
@@ -267,10 +249,8 @@ document.getElementById("btn-rew").addEventListener("click", () => {
   showFrame(currentFrame);
 });
 document.getElementById("btn-fwd").addEventListener("click", () => {
-  const total = viewMode === "surface"
-    ? metadata.n_frames
-    : (pcMetadata?.n_frames ?? metadata.n_frames);
-  currentFrame = Math.min(total - 1, currentFrame + 1);
+  const meta = viewMode === "surface" ? metadata : pcMetadata;
+  currentFrame = Math.min(meta.n_frames - 1, currentFrame + 1);
   showFrame(currentFrame);
 });
 btnLoop.addEventListener("click", () => {
@@ -278,7 +258,7 @@ btnLoop.addEventListener("click", () => {
   btnLoop.classList.toggle("on", looping);
 });
 
-// ── chart ──
+// ── Chart ──────────────────────────────────────────────────────────────────
 function buildChart() {
   const canvas = document.getElementById("chart-vm");
   const p = canvas.parentElement;
@@ -287,17 +267,18 @@ function buildChart() {
   drawChart(currentFrame);
 }
 
-function drawChart(activeIdx) {
+function drawChart(idx) {
   const canvas = document.getElementById("chart-vm");
   if (!canvas || !metadata) return;
   const ctx = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
-  const vms = metadata.frames.map((f) => f.vm_max);
+  const vms = metadata.frames.map(f => f.vm_max);
 
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = "#070b10";
   ctx.fillRect(0, 0, W, H);
 
+  // Yield line
   const yY = H - (350 / VM_MAX) * (H - 16) - 4;
   ctx.save();
   ctx.strokeStyle = "rgba(232,240,74,0.25)";
@@ -308,6 +289,7 @@ function drawChart(activeIdx) {
   ctx.font = "8px DM Mono,monospace";
   ctx.fillText("yield ~350 MPa", 3, yY - 3);
 
+  // Area
   ctx.beginPath();
   vms.forEach((v, i) => {
     const x = (i / (vms.length - 1)) * W;
@@ -318,6 +300,7 @@ function drawChart(activeIdx) {
   ctx.fillStyle = "rgba(255,60,31,0.08)";
   ctx.fill();
 
+  // Line
   ctx.beginPath();
   ctx.strokeStyle = "#ff3c1f";
   ctx.lineWidth = 1.5;
@@ -328,59 +311,60 @@ function drawChart(activeIdx) {
   });
   ctx.stroke();
 
-  const px = (activeIdx / (vms.length - 1)) * W;
+  // Cursor
+  const px = (idx / (vms.length - 1)) * W;
   ctx.strokeStyle = "rgba(232,240,74,0.7)";
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
-  const py = H - (vms[activeIdx] / VM_MAX) * (H - 16) - 4;
+  const py = H - (vms[idx] / VM_MAX) * (H - 16) - 4;
   ctx.beginPath();
   ctx.arc(px, py, 3, 0, Math.PI * 2);
   ctx.fillStyle = "#e8f04a";
   ctx.fill();
 }
 
-// ── 从 VTP 拆分护栏 / 车身 / 轮胎 三个独立 PolyData ──
-// VTP 点序：[barrier pts][body pts][tire pts]
-function splitVtpPolyData(initPd) {
-  const allPoints = initPd.getPoints().getData();
-  const polysData = initPd.getPolys().getData();
-  const vmAll     = initPd.getPointData().getArrayByName("von_mises").getData();
+// ── Build surface PolyData from VTP frame 0 ────────────────────────────────
+// VTP point order: [barrier: 0..N_BARRIER-1] [vehicle: N_BARRIER..N_TOTAL-1]
+// We split polys at N_BARRIER and build two separate PolyData instances.
+function buildSurface(vtpPd) {
+  const allPts  = vtpPd.getPoints().getData();
+  const polys   = vtpPd.getPolys().getData();
+  const vmAll   = vtpPd.getPointData().getArrayByName("von_mises").getData();
 
-  const bodyStart = N_BARRIER_PTS;
+  const bPolys = [];  // barrier polys (original indices)
+  const vPolys = [];  // vehicle polys (indices remapped by -N_BARRIER)
 
-  const barrierPolys = [];
-  const vehiclePolys = [];
-  let offset = 0;
-  while (offset < polysData.length) {
-    const n        = polysData[offset];
-    const firstIdx = polysData[offset + 1];
-    if (firstIdx < bodyStart) {
-      // barrier
-      for (let k = 0; k <= n; k++) barrierPolys.push(polysData[offset + k]);
+  let off = 0;
+  while (off < polys.length) {
+    const n         = polys[off];
+    const firstIdx  = polys[off + 1];
+    if (firstIdx < N_BARRIER) {
+      // Barrier polygon
+      for (let k = 0; k <= n; k++) bPolys.push(polys[off + k]);
     } else {
-      // body + tire 合并，统一偏移 -bodyStart
-      vehiclePolys.push(n);
-      for (let k = 1; k <= n; k++) vehiclePolys.push(polysData[offset + k] - bodyStart);
+      // Vehicle polygon (body or tire — treated the same)
+      vPolys.push(n);
+      for (let k = 1; k <= n; k++) vPolys.push(polys[off + k] - N_BARRIER);
     }
-    offset += n + 1;
+    off += n + 1;
   }
 
-  // 护栏 PolyData
+  // Barrier PolyData
   barrierPd = vtkPolyData.newInstance();
-  barrierPd.getPoints().setData(new Float32Array(allPoints.slice(0, bodyStart * 3)));
-  barrierPd.getPolys().setData(new Uint32Array(barrierPolys));
+  barrierPd.getPoints().setData(new Float32Array(allPts.slice(0, N_BARRIER * 3)), 3);
+  barrierPd.getPolys().setData(new Uint32Array(bPolys));
   const bVm = vtkDataArray.newInstance({
     name: "von_mises",
-    values: new Float32Array(vmAll.slice(0, N_BARRIER_PTS)),
+    values: new Float32Array(vmAll.slice(0, N_BARRIER)),
     numberOfComponents: 1,
   });
   barrierPd.getPointData().addArray(bVm);
   barrierPd.getPointData().setActiveScalars("von_mises");
 
-  // 车辆 PolyData（车身 + 轮胎合并）
+  // Vehicle PolyData (body + tires, grey, no scalar coloring)
   vehiclePd = vtkPolyData.newInstance();
-  vehiclePd.getPoints().setData(new Float32Array(allPoints.slice(bodyStart * 3)));
-  vehiclePd.getPolys().setData(new Uint32Array(vehiclePolys));
+  vehiclePd.getPoints().setData(new Float32Array(allPts.slice(N_BARRIER * 3)), 3);
+  vehiclePd.getPolys().setData(new Uint32Array(vPolys));
 
   barrierMapper.setInputData(barrierPd);
   vehicleMapper.setInputData(vehiclePd);
@@ -388,97 +372,94 @@ function splitVtpPolyData(initPd) {
   renderer.addActor(vehicleActor);
 }
 
-// ── 初始化点云 ──
+// ── Init point cloud ───────────────────────────────────────────────────────
 async function initPointCloud() {
   try {
     const res = await fetch(`${API}/api/pointcloud_metadata`);
     if (!res.ok) return;
     pcMetadata = await res.json();
-    N_PC = pcMetadata.n_points;
 
-    ldetail.textContent = "loading point cloud frame 0...";
-    const { points, vm } = await loadPcFrame(0);
-
+    const { xyz, vm } = await loadPcFrame(0);
+    const n = pcMetadata.n_points;
     const pd = vtkPolyData.newInstance();
-    pd.getPoints().setData(points, 3);
-    const n = points.length / 3;
+    pd.getPoints().setData(xyz, 3);
+    // Each point as a vertex cell
     const verts = new Uint32Array(n * 2);
     for (let i = 0; i < n; i++) { verts[i * 2] = 1; verts[i * 2 + 1] = i; }
     pd.getVerts().setData(verts);
-    const vmArr = vtkDataArray.newInstance({ name: "von_mises", values: vm, numberOfComponents: 1 });
+    const vmArr = vtkDataArray.newInstance({
+      name: "von_mises", values: vm, numberOfComponents: 1,
+    });
     pd.getPointData().addArray(vmArr);
     pd.getPointData().setActiveScalars("von_mises");
     pcMapper.setInputData(pd);
-
     renderer.addActor(pcActor);
     pcActor.setVisibility(false);
     btnParticles.disabled = false;
-    console.log(`点云就绪: ${N_PC.toLocaleString()} 点/帧`);
 
+    // Preload all PC frames in background
     (async () => {
       for (let k = 1; k < pcMetadata.n_frames; k++) await loadPcFrame(k);
-      console.log("点云所有帧预加载完成");
     })();
   } catch (e) {
-    console.warn("点云数据未找到:", e.message);
+    console.warn("Point cloud not available:", e.message);
   }
 }
 
-// ── main ──
+// ── Main ───────────────────────────────────────────────────────────────────
 async function main() {
   ldetail.textContent = "fetching metadata...";
   try {
     const res = await fetch(`${API}/api/metadata`);
-    metadata = await res.json();
-    N_BARRIER_PTS    = metadata.n_pts_barrier || 0;
-    N_POINTS_SURFACE = metadata.n_points     || 0;
+    metadata  = await res.json();
+    N_TOTAL   = metadata.n_points;
+    N_BARRIER = metadata.n_pts_barrier;
+    tlRange.max = metadata.n_frames - 1;
     buildMarks();
   } catch (e) {
-    ldetail.textContent = "ERROR: run node server/server.js first!";
+    ldetail.textContent = "ERROR: server not running";
     return;
   }
 
-  if (!N_BARRIER_PTS || !N_POINTS_SURFACE) {
-    ldetail.textContent = "ERROR: metadata missing — re-run export_vtp_v2.py then export_binary_v2.py";
+  if (!N_TOTAL || !N_BARRIER) {
+    ldetail.textContent = "ERROR: metadata missing n_points or n_pts_barrier";
     return;
   }
 
-  // 初始化两个 surface pipeline
+  // Load topology from VTP frame 0
   ldetail.textContent = "loading geometry...";
-  const initReader = vtkXMLPolyDataReader.newInstance();
-  await initReader.setUrl(`${API}/data_v2/frame_0000.vtp`);
-  await initReader.loadData();
-  const initPd = initReader.getOutputData(0);
-  splitVtpPolyData(initPd);
+  const reader = vtkXMLPolyDataReader.newInstance();
+  await reader.setUrl(`${API}/data_v2/frame_0000.vtp`);
+  await reader.loadData();
+  buildSurface(reader.getOutputData(0));
 
-  // 对准碰撞区域
-  const camera = renderer.getActiveCamera();
-  camera.setPosition(3917, 555 - 40000, 25000);
-  camera.setFocalPoint(3917, 555, 822);
-  camera.setViewUp(0, 0, 1);
+  // Camera aimed at crash zone
+  const cam = renderer.getActiveCamera();
+  cam.setPosition(3917, 555 - 40000, 25000);
+  cam.setFocalPoint(3917, 555, 822);
+  cam.setViewUp(0, 0, 1);
   renderer.resetCameraClippingRange();
-  renderWindow.render();
 
+  // Show frame 0
   ldetail.textContent = "loading frame 0...";
-  await loadFrame(0);
-
+  await showSurfaceFrame(0);
+  updateUI(0);
   lFrames.textContent = `${metadata.n_frames} / ${metadata.n_frames}`;
-  updateUI(0, metadata);
 
   loadingEl.classList.add("hidden");
   setTimeout(() => { loadingEl.style.display = "none"; }, 500);
   setTimeout(buildChart, 200);
   window.addEventListener("resize", buildChart);
 
+  // Preload all surface frames in background
   (async () => {
     for (let k = 1; k < metadata.n_frames; k++) await loadFrame(k);
-    console.log("Surface 所有帧预加载完成");
   })();
 
   await initPointCloud();
 }
 
-main().catch((e) => {
+main().catch(e => {
   ldetail.textContent = "ERROR: " + e.message;
   console.error(e);
 });
