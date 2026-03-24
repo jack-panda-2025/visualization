@@ -1,0 +1,409 @@
+{
+  "frames": [
+    {
+      "source": "d3plot",
+      "levels": {
+        "coarse": {
+          "file": "d3plot_coarse.ply",
+          "metrics": {
+            "vertices": 42,
+            "faces": 80,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                -1.0,
+                -1.0,
+                -1.0
+              ],
+              [
+                1.0,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        },
+        "medium": {
+          "file": "d3plot_medium.ply",
+          "metrics": {
+            "vertices": 162,
+            "faces": 320,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                -1.0,
+                -1.0,
+                -1.0
+              ],
+              [
+                1.0,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        },
+        "fine": {
+          "file": "d3plot_fine.ply",
+          "metrics": {
+            "vertices": 642,
+            "faces": 1280,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                -1.0,
+                -1.0,
+                -1.0
+              ],
+              [
+                1.0,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        }
+      },
+      "bbox": [
+        [
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "collision_with_prev": false
+    },
+    {
+      "source": "d3plot0001",
+      "levels": {
+        "coarse": {
+          "file": "d3plot0001_coarse.ply",
+          "metrics": {
+            "vertices": 42,
+            "faces": 80,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                -0.19999999999999996,
+                -1.0,
+                -1.0
+              ],
+              [
+                1.8,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        },
+        "medium": {
+          "file": "d3plot0001_medium.ply",
+          "metrics": {
+            "vertices": 162,
+            "faces": 320,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                -0.19999999999999996,
+                -1.0,
+                -1.0
+              ],
+              [
+                1.8,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        },
+        "fine": {
+          "file": "d3plot0001_fine.ply",
+          "metrics": {
+            "vertices": 642,
+            "faces": 1280,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                -0.19999999999999996,
+                -1.0,
+                -1.0
+              ],
+              [
+                1.8,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        }
+      },
+      "bbox": [
+        [
+          -0.19999999999999996,
+          -1.0,
+          -1.0
+        ],
+        [
+          1.8,
+          1.0,
+          1.0
+        ]
+      ],
+      "collision_with_prev": true
+    },
+    {
+      "source": "d3plot0002",
+      "levels": {
+        "coarse": {
+          "file": "d3plot0002_coarse.ply",
+          "metrics": {
+            "vertices": 42,
+            "faces": 80,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                0.6000000000000001,
+                -1.0,
+                -1.0
+              ],
+              [
+                2.6,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        },
+        "medium": {
+          "file": "d3plot0002_medium.ply",
+          "metrics": {
+            "vertices": 162,
+            "faces": 320,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                0.6000000000000001,
+                -1.0,
+                -1.0
+              ],
+              [
+                2.6,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        },
+        "fine": {
+          "file": "d3plot0002_fine.ply",
+          "metrics": {
+            "vertices": 642,
+            "faces": 1280,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                0.6000000000000001,
+                -1.0,
+                -1.0
+              ],
+              [
+                2.6,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        }
+      },
+      "bbox": [
+        [
+          0.6000000000000001,
+          -1.0,
+          -1.0
+        ],
+        [
+          2.6,
+          1.0,
+          1.0
+        ]
+      ],
+      "collision_with_prev": true
+    },
+    {
+      "source": "d3plot0003",
+      "levels": {
+        "coarse": {
+          "file": "d3plot0003_coarse.ply",
+          "metrics": {
+            "vertices": 42,
+            "faces": 80,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                1.4000000000000004,
+                -1.0,
+                -1.0
+              ],
+              [
+                3.4000000000000004,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        },
+        "medium": {
+          "file": "d3plot0003_medium.ply",
+          "metrics": {
+            "vertices": 162,
+            "faces": 320,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                1.4000000000000004,
+                -1.0,
+                -1.0
+              ],
+              [
+                3.4000000000000004,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        },
+        "fine": {
+          "file": "d3plot0003_fine.ply",
+          "metrics": {
+            "vertices": 642,
+            "faces": 1280,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                1.4000000000000004,
+                -1.0,
+                -1.0
+              ],
+              [
+                3.4000000000000004,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        }
+      },
+      "bbox": [
+        [
+          1.4000000000000004,
+          -1.0,
+          -1.0
+        ],
+        [
+          3.4000000000000004,
+          1.0,
+          1.0
+        ]
+      ],
+      "collision_with_prev": true
+    },
+    {
+      "source": "d3plot0004",
+      "levels": {
+        "coarse": {
+          "file": "d3plot0004_coarse.ply",
+          "metrics": {
+            "vertices": 42,
+            "faces": 80,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                2.2,
+                -1.0,
+                -1.0
+              ],
+              [
+                4.2,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        },
+        "medium": {
+          "file": "d3plot0004_medium.ply",
+          "metrics": {
+            "vertices": 162,
+            "faces": 320,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                2.2,
+                -1.0,
+                -1.0
+              ],
+              [
+                4.2,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        },
+        "fine": {
+          "file": "d3plot0004_fine.ply",
+          "metrics": {
+            "vertices": 642,
+            "faces": 1280,
+            "is_watertight": true,
+            "euler_number": 2.0,
+            "bounds": [
+              [
+                2.2,
+                -1.0,
+                -1.0
+              ],
+              [
+                4.2,
+                1.0,
+                1.0
+              ]
+            ]
+          }
+        }
+      },
+      "bbox": [
+        [
+          2.2,
+          -1.0,
+          -1.0
+        ],
+        [
+          4.2,
+          1.0,
+          1.0
+        ]
+      ],
+      "collision_with_prev": true
+    }
+  ]
+}
