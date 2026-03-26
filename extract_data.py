@@ -22,7 +22,6 @@ MEGA_PART_IDS = [
 ]
 
 TIRE_PART_IDS = [
-    # 前轴 (X≈-1028)
     2000441,
     2000444,
     2000440,
@@ -35,7 +34,6 @@ TIRE_PART_IDS = [
     2000178,
     2000407,
     2000408,
-    # 后轴 (X≈-4589)
     2000449,
     2000452,
     2000448,
@@ -46,7 +44,6 @@ TIRE_PART_IDS = [
     2000454,
     2000678,
     2000679,
-    # 第三轴 (X≈-5206)
     2000822,
     2000821,
     2000824,
@@ -72,12 +69,12 @@ def get(key):
 timesteps = get("global_timesteps")
 coords = get("node_coordinates")
 disp = get("node_displacement")
-velocity = get("node_velocity")
 part_ids = get("part_ids")
 shell_nodes = get("element_shell_node_indexes")
 shell_parts = get("element_shell_part_indexes")
 solid_nodes = get("element_solid_node_indexes")
 solid_parts = get("element_solid_part_indexes")
+shell_eps = get("element_shell_effective_plastic_strain")  # (55, 768288, 3)
 
 n_nodes = coords.shape[0]
 n_states = len(timesteps)
@@ -137,52 +134,137 @@ all_nodes = np.unique(
     np.concatenate([mega_sampled, mid_sampled, small_sampled, tiny_sampled])
 )
 
+N = len(all_nodes)
 print(f"\n节点采样结果：")
 print(f"  超大 part  : {len(mega_sampled):>8,}")
 print(f"  中等 part  : {len(mid_sampled):>8,}")
 print(f"  小 part    : {len(small_sampled):>8,}")
 print(f"  微小 part  : {len(tiny_sampled):>8,}")
-print(f"  车身合计   : {len(all_nodes):>8,}")
+print(f"  车身合计   : {N:>8,}")
 
-# ---- 提取车身物理量 ----
-print("\n提取车身物理量 ...")
+# ---- 提取车身位置 ----
+print("\n提取车身位置 ...")
 frame_idx = list(range(0, n_states, FRAME_STEP))
 n_frames = len(frame_idx)
 base_coords = coords[all_nodes].astype(np.float32)
 disp_sub = disp[np.ix_(frame_idx, all_nodes)].astype(np.float32)
-vel_sub = velocity[np.ix_(frame_idx, all_nodes)].astype(np.float32)
+pos_frames = base_coords[None] + disp_sub  # (F, N, 3)
 
-pos_frames = base_coords[None] + disp_sub
-speed = np.linalg.norm(vel_sub, axis=-1)
-spd_max = float(speed.max())
-spd_q = (speed / spd_max * 255).astype(np.uint8)
+# ---- 节点 → shell 单元映射（向量化）----
+print("建立节点-单元映射 ...")
+node_to_shell = np.full(n_nodes, -1, dtype=np.int32)
+for col in range(shell_nodes.shape[1]):
+    nids = shell_nodes[:, col]
+    valid = (nids >= 0) & (nids < n_nodes)
+    node_to_shell[nids[valid]] = np.where(valid)[0]
 
-layer = np.full(len(all_nodes), 2, dtype=np.uint8)
-layer[np.isin(all_nodes, mega_sampled)] = 0
-layer[np.isin(all_nodes, mid_sampled)] = 1
+sampled_shell_elem = node_to_shell[all_nodes]  # (N,)
+valid_mask = sampled_shell_elem >= 0
+print(f"  有效 shell 节点: {valid_mask.sum():,} / {N:,}")
 
-# ---- 提取轮胎几何信息 ----
-print("提取轮胎几何信息 ...")
+# ---- 提取各帧塑性应变（全向量化）----
+print("提取各帧等效塑性应变 ...")
+node_eps = np.zeros((n_frames, N), dtype=np.float32)
+
+for fi, si in enumerate(frame_idx):
+    eps_frame = shell_eps[si, :, 0]  # (768288,) 取外层
+    node_eps[fi, valid_mask] = eps_frame[sampled_shell_elem[valid_mask]]
+
+eps_max = float(node_eps.max())
+print(f"  最大等效塑性应变: {eps_max:.6f}")
+
+# ---- 归一化策略：0单独保留，非零部分用P95做上限 ----
+nonzero_vals = node_eps[node_eps > 0]
+if len(nonzero_vals) > 0:
+    eps_p95 = float(np.percentile(nonzero_vals, 95))
+else:
+    eps_p95 = max(eps_max, 1e-8)
+
+print(f"  非零P95上限     : {eps_p95:.6f}  (颜色归一化上限)")
+print(f"  非零节点比例    : {len(nonzero_vals) / (n_frames * N) * 100:.1f}%")
+
+# 0 → 保持0（HTML端检测到0显示暗色）
+# 非零 → 映射到 2-255
+eps_q = np.zeros((n_frames, N), dtype=np.uint8)
+nonzero_mask = node_eps > 0
+eps_q[nonzero_mask] = np.clip(
+    2 + (node_eps[nonzero_mask] / eps_p95 * 253), 2, 255
+).astype(np.uint8)
+
+# ---- 提取 Von Mises 应力 ----
+print("\n提取 Von Mises 应力 ...")
+node_vm = np.zeros((n_frames, N), dtype=np.float32)
+has_vm = False
+
+shell_stress = get("element_shell_stress")
+if shell_stress is not None:
+    print(f"  element_shell_stress shape: {shell_stress.shape}")
+    # Shape can be (F, E, 6) or (F, E, n_ip, 6)
+    if shell_stress.ndim == 4:
+        s = shell_stress[np.ix_(frame_idx, np.arange(shell_stress.shape[1]))].mean(axis=2)
+    elif shell_stress.ndim == 3:
+        s = shell_stress[frame_idx]
+    else:
+        s = None
+
+    if s is not None and s.shape[-1] >= 4:
+        s = s.astype(np.float32)
+        sxx, syy = s[..., 0], s[..., 1]
+        szz = s[..., 2] if s.shape[-1] > 2 else np.zeros_like(sxx)
+        sxy = s[..., 3] if s.shape[-1] > 3 else np.zeros_like(sxx)
+        syz = s[..., 4] if s.shape[-1] > 4 else np.zeros_like(sxx)
+        sxz = s[..., 5] if s.shape[-1] > 5 else np.zeros_like(sxx)
+        vm_elem = np.sqrt(
+            0.5 * ((sxx - syy) ** 2 + (syy - szz) ** 2 + (szz - sxx) ** 2
+                   + 6 * (sxy ** 2 + syz ** 2 + sxz ** 2))
+        )  # (F, E)
+        for fi in range(n_frames):
+            node_vm[fi, valid_mask] = vm_elem[fi][sampled_shell_elem[valid_mask]]
+        has_vm = True
+        print(f"  最大 Von Mises 应力: {node_vm.max():.2f}")
+    else:
+        print("  stress 字段维度不符合预期，跳过")
+else:
+    print("  未找到 element_shell_stress，尝试节点速度派生...")
+    node_vel = get("node_velocity")
+    if node_vel is not None:
+        print(f"  node_velocity shape: {node_vel.shape}")
+        vel_sub = node_vel[np.ix_(frame_idx, all_nodes)].astype(np.float32)
+        speed = np.linalg.norm(vel_sub, axis=2)  # (F, N)
+        node_vm = speed
+        has_vm = True
+        print(f"  最大速度: {node_vm.max():.2f} mm/s")
+    else:
+        print("  无可用应力/速度数据，vm 通道将置零")
+
+vm_max_val = float(node_vm.max())
+nonzero_vm = node_vm[node_vm > 0]
+vm_p95 = float(np.percentile(nonzero_vm, 95)) if len(nonzero_vm) > 0 else max(vm_max_val, 1e-8)
+print(f"  vm P95: {vm_p95:.4f}  max: {vm_max_val:.4f}")
+
+vm_q = np.zeros((n_frames, N), dtype=np.uint8)
+vm_nonzero = node_vm > 0
+vm_q[vm_nonzero] = np.clip(
+    2 + (node_vm[vm_nonzero] / vm_p95 * 253), 2, 255
+).astype(np.uint8)
+
+# ---- 提取轮胎几何 ----
+print("\n提取轮胎几何信息 ...")
 valid_tire_parts = [p for p in TIRE_PART_IDS if p in part_node_counts]
 n_tires = len(valid_tire_parts)
 print(f"  有效轮胎 part 数: {n_tires}")
 
-# 每帧每个轮胎存 8 个 float：[cx, cy, cz, ax, ay, az, radius, width]
 tire_data = np.zeros((n_frames, n_tires, 8), dtype=np.float32)
 
 for ti, pid in enumerate(valid_tire_parts):
     idx = np.where(node_part == pid)[0]
-    base = coords[idx].astype(np.float32)  # (N, 3)
-
-    # PCA 确定轴向（最小惯性轴 = 旋转轴）
+    base = coords[idx].astype(np.float32)
     c0 = base.mean(axis=0)
     pts = base - c0
     cov = np.cov(pts.T)
     eigvals, eigvecs = np.linalg.eigh(cov)
     axis = eigvecs[:, 0].astype(np.float32)
     axis = axis / (np.linalg.norm(axis) + 1e-8)
-
-    # 初始帧宽度（沿轴方向范围，不随旋转变化）
     proj_axis = pts @ axis
     width_init = float(proj_axis.max() - proj_axis.min())
 
@@ -190,48 +272,50 @@ for ti, pid in enumerate(valid_tire_parts):
         cur = base + disp[si][idx].astype(np.float32)
         center = cur.mean(axis=0)
         pts_f = cur - center
-
-        # 半径：投影到轴垂直平面后取平均距离
         proj_f = pts_f - np.outer(pts_f @ axis, axis)
         radius = float(np.linalg.norm(proj_f, axis=1).mean())
-
         tire_data[fi, ti, 0:3] = center
         tire_data[fi, ti, 3:6] = axis
         tire_data[fi, ti, 6] = radius
         tire_data[fi, ti, 7] = width_init
 
-    print(
-        f"  part {pid:>8}  半径={tire_data[0,ti,6]:.1f}  宽={width_init:.1f}  "
-        f"轴=({axis[0]:.2f},{axis[1]:.2f},{axis[2]:.2f})"
-    )
+layer = np.full(N, 2, dtype=np.uint8)
+layer[np.isin(all_nodes, mega_sampled)] = 0
+layer[np.isin(all_nodes, mid_sampled)] = 1
 
 # ---- 写 COL2 二进制 ----
 print("\n序列化写入 ...")
-N = len(all_nodes)
 
 with open(OUTPUT_PATH, "wb") as f:
-    # header: magic(4) + n_frames(i) + n_nodes(i) + n_tires(i) + spd_max(f) + pad(f)
-    f.write(struct.pack("<4siiiff", b"COL2", n_frames, N, int(n_tires), spd_max, 0.0))
+    # header: magic(4) + n_frames(i) + n_nodes(i) + n_tires(i) + eps_p95(f) + eps_max(f) + vm_p95(f) + vm_max(f)
+    f.write(
+        struct.pack("<4siiiffff", b"COL3", n_frames, N, int(n_tires),
+                   eps_p95, eps_max, vm_p95, vm_max_val)
+    )
 
-    # 时间戳 float32 × n_frames
+    # 时间戳
     times = np.array([timesteps[i] for i in frame_idx], dtype=np.float32)
     f.write(times.tobytes())
 
-    # 车身每帧：pos float32 (N×3) + spd uint8 (N)
+    # 车身每帧：pos float32 (N×3) + eps uint8 (N) + vm uint8 (N)
     for fi in range(n_frames):
         f.write(pos_frames[fi].astype(np.float32).tobytes())
-        f.write(spd_q[fi].tobytes())
+        f.write(eps_q[fi].tobytes())
+        f.write(vm_q[fi].tobytes())
 
-    # 轮胎几何每帧：float32 (n_tires × 8)
+    # 轮胎几何每帧
     for fi in range(n_frames):
         f.write(tire_data[fi].tobytes())
 
-    # layer 标签 uint8 × N
+    # layer
     f.write(layer.tobytes())
 
 size_mb = os.path.getsize(OUTPUT_PATH) / 1024 / 1024
 print(f"\n完成！")
-print(f"  输出文件  : {OUTPUT_PATH}")
-print(f"  文件大小  : {size_mb:.1f} MB")
-print(f"  轮胎 part : {n_tires} 个")
-print(f"  节点压缩比: {n_nodes / N:.1f}x")
+print(f"  输出文件     : {OUTPUT_PATH}")
+print(f"  文件大小     : {size_mb:.1f} MB")
+print(f"  最大塑性应变 : {eps_max:.6f}")
+print(f"  PEEQ P95上限 : {eps_p95:.6f}")
+print(f"  最大VM应力   : {vm_max_val:.4f}")
+print(f"  VM P95上限   : {vm_p95:.4f}")
+print(f"  节点压缩比   : {n_nodes / N:.1f}x")
