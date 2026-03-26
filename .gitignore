@@ -1,0 +1,18 @@
+# Data files (large binary/simulation data)
+data/
+*.bin
+*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# Large output files
+vtp_output_v3/
+*.ply
