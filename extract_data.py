@@ -313,6 +313,11 @@ with open(OUTPUT_PATH, "wb") as f:
     # layer
     f.write(layer.tobytes())
 
+    # part_label: int32 × N，每个节点对应的 part ID
+    part_label = node_part[all_nodes].astype(np.int32)
+    f.write(part_label.tobytes())
+    print(f"  写入 part_label: {len(part_label):,} 个节点")
+
 size_mb = os.path.getsize(OUTPUT_PATH) / 1024 / 1024
 print(f"\n完成！")
 print(f"  输出文件     : {OUTPUT_PATH}")
