@@ -70,11 +70,12 @@ timesteps = get("global_timesteps")
 coords = get("node_coordinates")
 disp = get("node_displacement")
 part_ids = get("part_ids")
-shell_nodes = get("element_shell_node_indexes")
-shell_parts = get("element_shell_part_indexes")
-solid_nodes = get("element_solid_node_indexes")
-solid_parts = get("element_solid_part_indexes")
+shell_nodes = get("element_shell_node_indexes")  # (768288, 4)
+shell_parts = get("element_shell_part_indexes")  # (768288,)
+solid_nodes = get("element_solid_node_indexes")  # (825280, 8)
+solid_parts = get("element_solid_part_indexes")  # (825280,)
 shell_eps = get("element_shell_effective_plastic_strain")  # (55, 768288, 3)
+solid_stress = get("element_solid_stress")  # (55, 825280, 1, 6)
 
 n_nodes = coords.shape[0]
 n_states = len(timesteps)
@@ -150,103 +151,99 @@ base_coords = coords[all_nodes].astype(np.float32)
 disp_sub = disp[np.ix_(frame_idx, all_nodes)].astype(np.float32)
 pos_frames = base_coords[None] + disp_sub  # (F, N, 3)
 
-# ---- 节点 → shell 单元映射（向量化）----
-print("建立节点-单元映射 ...")
+# ---- 节点 → shell 单元映射 ----
+print("建立 shell 节点-单元映射 ...")
 node_to_shell = np.full(n_nodes, -1, dtype=np.int32)
 for col in range(shell_nodes.shape[1]):
     nids = shell_nodes[:, col]
     valid = (nids >= 0) & (nids < n_nodes)
     node_to_shell[nids[valid]] = np.where(valid)[0]
 
-sampled_shell_elem = node_to_shell[all_nodes]  # (N,)
-valid_mask = sampled_shell_elem >= 0
-print(f"  有效 shell 节点: {valid_mask.sum():,} / {N:,}")
+sampled_shell_elem = node_to_shell[all_nodes]
+shell_valid = sampled_shell_elem >= 0
+print(f"  有效 shell 节点: {shell_valid.sum():,} / {N:,}")
 
-# ---- 提取各帧塑性应变（全向量化）----
-print("提取各帧等效塑性应变 ...")
-node_eps = np.zeros((n_frames, N), dtype=np.float32)
+# ---- 节点 → solid 单元映射 ----
+print("建立 solid 节点-单元映射 ...")
+node_to_solid = np.full(n_nodes, -1, dtype=np.int32)
+for col in range(solid_nodes.shape[1]):
+    nids = solid_nodes[:, col]
+    valid = (nids >= 0) & (nids < n_nodes)
+    node_to_solid[nids[valid]] = np.where(valid)[0]
+
+sampled_solid_elem = node_to_solid[all_nodes]
+solid_valid = sampled_solid_elem >= 0
+print(f"  有效 solid 节点: {solid_valid.sum():,} / {N:,}")
+
+# ---- 提取各帧物理量，合并为统一着色值 ----
+print("\n提取各帧应变/应力 ...")
+
+# 先算最后一帧的 solid Von Mises 最大值，用于量纲统一
+sv_last = solid_stress[-1, :, 0, :]  # (825280, 6)
+s11, s22, s33 = sv_last[:, 0], sv_last[:, 1], sv_last[:, 2]
+s12, s23, s13 = sv_last[:, 3], sv_last[:, 4], sv_last[:, 5]
+vm_last = np.sqrt(
+    0.5
+    * (
+        (s11 - s22) ** 2
+        + (s22 - s33) ** 2
+        + (s33 - s11) ** 2
+        + 6 * (s12**2 + s23**2 + s13**2)
+    )
+)
+vm_max = float(vm_last.max())
+print(f"  Solid Von Mises 最大值（最后帧）: {vm_max:.2f} MPa")
+
+# shell 塑性应变 P95（非零部分）
+eps_last = shell_eps[-1, :, 0]
+nonzero_eps = eps_last[eps_last > 0]
+eps_p95 = float(np.percentile(nonzero_eps, 95)) if len(nonzero_eps) > 0 else 1.0
+print(f"  Shell 塑性应变 P95: {eps_p95:.6f}")
+
+# solid Von Mises P95
+nonzero_vm = vm_last[vm_last > 0]
+vm_p95 = float(np.percentile(nonzero_vm, 95)) if len(nonzero_vm) > 0 else vm_max
+print(f"  Solid Von Mises P95: {vm_p95:.2f} MPa")
+
+# 统一到 [0,1]：shell 用 eps/eps_p95，solid 用 vm/vm_p95
+# 两者都归一化到同一色谱，0=无变形，1=高应变/高应力
+node_val = np.zeros((n_frames, N), dtype=np.float32)
 
 for fi, si in enumerate(frame_idx):
-    eps_frame = shell_eps[si, :, 0]  # (768288,) 取外层
-    node_eps[fi, valid_mask] = eps_frame[sampled_shell_elem[valid_mask]]
+    # shell 塑性应变
+    if shell_eps is not None:
+        eps_frame = shell_eps[si, :, 0]
+        node_val[fi, shell_valid] = eps_frame[sampled_shell_elem[shell_valid]] / eps_p95
 
-eps_max = float(node_eps.max())
-print(f"  最大等效塑性应变: {eps_max:.6f}")
+    # solid Von Mises（只覆盖 solid 节点，不覆盖已有 shell 值）
+    if solid_stress is not None:
+        sv = solid_stress[si, :, 0, :]
+        s11, s22, s33 = sv[:, 0], sv[:, 1], sv[:, 2]
+        s12, s23, s13 = sv[:, 3], sv[:, 4], sv[:, 5]
+        vm = np.sqrt(
+            0.5
+            * (
+                (s11 - s22) ** 2
+                + (s22 - s33) ** 2
+                + (s33 - s11) ** 2
+                + 6 * (s12**2 + s23**2 + s13**2)
+            )
+        )
+        # 只写入没有 shell 数据的 solid 节点
+        solid_only = solid_valid & ~shell_valid
+        node_val[fi, solid_only] = vm[sampled_solid_elem[solid_only]] / vm_p95
 
-# ---- 归一化策略：0单独保留，非零部分用P95做上限 ----
-nonzero_vals = node_eps[node_eps > 0]
-if len(nonzero_vals) > 0:
-    eps_p95 = float(np.percentile(nonzero_vals, 95))
-else:
-    eps_p95 = max(eps_max, 1e-8)
+# 裁剪到 [0,1]
+node_val = np.clip(node_val, 0, 1)
 
-print(f"  非零P95上限     : {eps_p95:.6f}  (颜色归一化上限)")
-print(f"  非零节点比例    : {len(nonzero_vals) / (n_frames * N) * 100:.1f}%")
+# 量化：0=无变形（保留为0），非零映射到 2-255
+val_q = np.zeros((n_frames, N), dtype=np.uint8)
+nonzero_mask = node_val > 0.001  # 阈值过滤极小值
+val_q[nonzero_mask] = np.clip(2 + (node_val[nonzero_mask] * 253), 2, 255).astype(
+    np.uint8
+)
 
-# 0 → 保持0（HTML端检测到0显示暗色）
-# 非零 → 映射到 2-255
-eps_q = np.zeros((n_frames, N), dtype=np.uint8)
-nonzero_mask = node_eps > 0
-eps_q[nonzero_mask] = np.clip(
-    2 + (node_eps[nonzero_mask] / eps_p95 * 253), 2, 255
-).astype(np.uint8)
-
-# ---- 提取 Von Mises 应力 ----
-print("\n提取 Von Mises 应力 ...")
-node_vm = np.zeros((n_frames, N), dtype=np.float32)
-has_vm = False
-
-shell_stress = get("element_shell_stress")
-if shell_stress is not None:
-    print(f"  element_shell_stress shape: {shell_stress.shape}")
-    # Shape can be (F, E, 6) or (F, E, n_ip, 6)
-    if shell_stress.ndim == 4:
-        s = shell_stress[np.ix_(frame_idx, np.arange(shell_stress.shape[1]))].mean(axis=2)
-    elif shell_stress.ndim == 3:
-        s = shell_stress[frame_idx]
-    else:
-        s = None
-
-    if s is not None and s.shape[-1] >= 4:
-        s = s.astype(np.float32)
-        sxx, syy = s[..., 0], s[..., 1]
-        szz = s[..., 2] if s.shape[-1] > 2 else np.zeros_like(sxx)
-        sxy = s[..., 3] if s.shape[-1] > 3 else np.zeros_like(sxx)
-        syz = s[..., 4] if s.shape[-1] > 4 else np.zeros_like(sxx)
-        sxz = s[..., 5] if s.shape[-1] > 5 else np.zeros_like(sxx)
-        vm_elem = np.sqrt(
-            0.5 * ((sxx - syy) ** 2 + (syy - szz) ** 2 + (szz - sxx) ** 2
-                   + 6 * (sxy ** 2 + syz ** 2 + sxz ** 2))
-        )  # (F, E)
-        for fi in range(n_frames):
-            node_vm[fi, valid_mask] = vm_elem[fi][sampled_shell_elem[valid_mask]]
-        has_vm = True
-        print(f"  最大 Von Mises 应力: {node_vm.max():.2f}")
-    else:
-        print("  stress 字段维度不符合预期，跳过")
-else:
-    print("  未找到 element_shell_stress，尝试节点速度派生...")
-    node_vel = get("node_velocity")
-    if node_vel is not None:
-        print(f"  node_velocity shape: {node_vel.shape}")
-        vel_sub = node_vel[np.ix_(frame_idx, all_nodes)].astype(np.float32)
-        speed = np.linalg.norm(vel_sub, axis=2)  # (F, N)
-        node_vm = speed
-        has_vm = True
-        print(f"  最大速度: {node_vm.max():.2f} mm/s")
-    else:
-        print("  无可用应力/速度数据，vm 通道将置零")
-
-vm_max_val = float(node_vm.max())
-nonzero_vm = node_vm[node_vm > 0]
-vm_p95 = float(np.percentile(nonzero_vm, 95)) if len(nonzero_vm) > 0 else max(vm_max_val, 1e-8)
-print(f"  vm P95: {vm_p95:.4f}  max: {vm_max_val:.4f}")
-
-vm_q = np.zeros((n_frames, N), dtype=np.uint8)
-vm_nonzero = node_vm > 0
-vm_q[vm_nonzero] = np.clip(
-    2 + (node_vm[vm_nonzero] / vm_p95 * 253), 2, 255
-).astype(np.uint8)
+print(f"  有颜色节点比例（最后帧）: {(val_q[-1] >= 2).mean()*100:.1f}%")
 
 # ---- 提取轮胎几何 ----
 print("\n提取轮胎几何信息 ...")
@@ -287,21 +284,27 @@ layer[np.isin(all_nodes, mid_sampled)] = 1
 print("\n序列化写入 ...")
 
 with open(OUTPUT_PATH, "wb") as f:
-    # header: magic(4) + n_frames(i) + n_nodes(i) + n_tires(i) + eps_p95(f) + eps_max(f) + vm_p95(f) + vm_max(f)
+    # header: magic(4) + n_frames(i) + n_nodes(i) + n_tires(i) + eps_p95(f) + vm_p95(f)
     f.write(
-        struct.pack("<4siiiffff", b"COL3", n_frames, N, int(n_tires),
-                   eps_p95, eps_max, vm_p95, vm_max_val)
+        struct.pack(
+            "<4siiiff",
+            b"COL2",
+            n_frames,
+            N,
+            int(n_tires),
+            float(eps_p95),
+            float(vm_p95),
+        )
     )
 
     # 时间戳
     times = np.array([timesteps[i] for i in frame_idx], dtype=np.float32)
     f.write(times.tobytes())
 
-    # 车身每帧：pos float32 (N×3) + eps uint8 (N) + vm uint8 (N)
+    # 车身每帧：pos float32 (N×3) + val uint8 (N)
     for fi in range(n_frames):
         f.write(pos_frames[fi].astype(np.float32).tobytes())
-        f.write(eps_q[fi].tobytes())
-        f.write(vm_q[fi].tobytes())
+        f.write(val_q[fi].tobytes())
 
     # 轮胎几何每帧
     for fi in range(n_frames):
@@ -314,8 +317,6 @@ size_mb = os.path.getsize(OUTPUT_PATH) / 1024 / 1024
 print(f"\n完成！")
 print(f"  输出文件     : {OUTPUT_PATH}")
 print(f"  文件大小     : {size_mb:.1f} MB")
-print(f"  最大塑性应变 : {eps_max:.6f}")
-print(f"  PEEQ P95上限 : {eps_p95:.6f}")
-print(f"  最大VM应力   : {vm_max_val:.4f}")
-print(f"  VM P95上限   : {vm_p95:.4f}")
+print(f"  Shell P95   : {eps_p95:.6f}")
+print(f"  Solid P95   : {vm_p95:.2f} MPa")
 print(f"  节点压缩比   : {n_nodes / N:.1f}x")

@@ -161,26 +161,7 @@
         text-align: right;
         line-height: 1.7;
       }
-      #mode-toggle {
-        display: flex;
-        gap: 6px;
-        pointer-events: all;
-      }
-      .mode-btn {
-        padding: 4px 10px;
-        border-radius: 4px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        background: rgba(255, 255, 255, 0.06);
-        color: rgba(255, 255, 255, 0.45);
-        font-size: 11px;
-        cursor: pointer;
-        transition: background 0.15s, color 0.15s;
-      }
-      .mode-btn.active {
-        background: rgba(100, 160, 255, 0.25);
-        border-color: rgba(100, 160, 255, 0.6);
-        color: rgba(200, 225, 255, 0.95);
-      }
+
       #loading {
         position: absolute;
         inset: 0;
@@ -221,14 +202,8 @@
     <div id="canvas-container"></div>
 
     <div id="top-bar">
-      <div id="title">碰撞仿真可视化</div>
-      <div style="display:flex;align-items:center;gap:16px;">
-        <div id="mode-toggle">
-          <button class="mode-btn active" id="btn-peeq" onclick="setMode('peeq')">PEEQ 塑性应变</button>
-          <button class="mode-btn" id="btn-vm" onclick="setMode('vm')">Von Mises 应力</button>
-        </div>
-        <div id="hint">左键旋转 · 右键平移 · 滚轮缩放</div>
-      </div>
+      <div id="title">碰撞仿真 — PEEQ 塑性应变 + Von Mises 应力</div>
+      <div id="hint">左键旋转 · 右键平移 · 滚轮缩放</div>
     </div>
 
     <div id="ui">
@@ -267,7 +242,7 @@
           >
         </div>
         <div id="colorbar-wrap">
-          <div id="colorbar-title">PEEQ 塑性应变（蓝=低，红=高）</div>
+          <div id="colorbar-title">碰撞强度 PEEQ / Von Mises（蓝=低，红=高）</div>
           <div id="colorbar-row">
             <span class="cb-label">0</span>
             <div id="colorbar-gradient"></div>
@@ -287,24 +262,8 @@
       let meta = null;
       let timesArr = null;
       let posFrames = null;
-      let epsFrames = null;
-      let vmFrames = null;
+      let valFrames = null;
       let tireFrames = null;
-      let colorMode = 'peeq'; // 'peeq' | 'vm'
-
-      function setMode(mode) {
-        colorMode = mode;
-        document.getElementById('btn-peeq').classList.toggle('active', mode === 'peeq');
-        document.getElementById('btn-vm').classList.toggle('active', mode === 'vm');
-        if (meta) {
-          const isVm = mode === 'vm';
-          document.getElementById('colorbar-title').textContent =
-            isVm ? 'Von Mises 应力（蓝=低，红=高）' : '塑性应变 PEEQ（蓝=低，红=高）';
-          document.getElementById('cb-max').textContent =
-            isVm ? (meta.vm_p95.toFixed(1) + '+') : (meta.eps_p95.toFixed(4) + '+');
-          applyFrame(curFrame);
-        }
-      }
 
       function parseBin(buffer) {
         const view = new DataView(buffer);
@@ -316,27 +275,17 @@
           view.getUint8(2),
           view.getUint8(3),
         );
-        if (magic !== "COL2" && magic !== "COL3")
+        if (magic !== "COL2")
           throw new Error(`magic="${magic}"，请重新生成 collision_light.bin`);
         off = 4;
 
-        const n_frames = view.getInt32(off, true);
-        off += 4;
-        const n_nodes = view.getInt32(off, true);
-        off += 4;
-        const n_tires = view.getInt32(off, true);
-        off += 4;
-        const eps_p95 = view.getFloat32(off, true);
-        off += 4;
-        const eps_max = view.getFloat32(off, true);
-        off += 4;
-        let vm_p95 = 0, vm_max = 0;
-        if (magic === "COL3") {
-          vm_p95 = view.getFloat32(off, true); off += 4;
-          vm_max = view.getFloat32(off, true); off += 4;
-        }
+        const n_frames = view.getInt32(off, true); off += 4;
+        const n_nodes  = view.getInt32(off, true); off += 4;
+        const n_tires  = view.getInt32(off, true); off += 4;
+        const eps_p95  = view.getFloat32(off, true); off += 4;  // shell PEEQ P95
+        const vm_p95   = view.getFloat32(off, true); off += 4;  // solid Von Mises P95
 
-        meta = { magic, n_frames, n_nodes, n_tires, eps_p95, eps_max, vm_p95, vm_max };
+        meta = { n_frames, n_nodes, n_tires, eps_p95, vm_p95 };
 
         timesArr = new Float32Array(n_frames);
         for (let i = 0; i < n_frames; i++) {
@@ -345,8 +294,7 @@
         }
 
         posFrames = [];
-        epsFrames = [];
-        vmFrames = [];
+        valFrames = [];
         for (let f = 0; f < n_frames; f++) {
           const pArr = new Float32Array(n_nodes * 3);
           for (let i = 0; i < n_nodes * 3; i++) {
@@ -354,20 +302,12 @@
             off += 4;
           }
           posFrames.push(pArr);
-          const eArr = new Uint8Array(n_nodes);
+          const vArr = new Uint8Array(n_nodes);
           for (let i = 0; i < n_nodes; i++) {
-            eArr[i] = view.getUint8(off);
+            vArr[i] = view.getUint8(off);
             off += 1;
           }
-          epsFrames.push(eArr);
-          if (magic === "COL3") {
-            const vArr = new Uint8Array(n_nodes);
-            for (let i = 0; i < n_nodes; i++) {
-              vArr[i] = view.getUint8(off);
-              off += 1;
-            }
-            vmFrames.push(vArr);
-          }
+          valFrames.push(vArr);
         }
 
         tireFrames = [];
@@ -569,22 +509,19 @@
         if (!bodyCloud) return;
         const { n_nodes } = meta;
         const pos = posFrames[fi];
-        const eps = epsFrames[fi];
+        const val = valFrames[fi];
 
         posBuf.set(pos);
 
-        const useVm = colorMode === 'vm' && vmFrames && vmFrames.length > fi;
-        const valArr = useVm ? vmFrames[fi] : eps;
-
         for (let i = 0; i < n_nodes; i++) {
-          const v = valArr[i];
+          const v = val[i];
           if (v < 2) {
-            // 无数据 → 蓝紫色车身轮廓
+            // 无变形/应力 → 暗蓝紫色轮廓
             colBuf[i * 3]     = 0.12;
             colBuf[i * 3 + 1] = 0.14;
             colBuf[i * 3 + 2] = 0.35;
           } else {
-            // 有值 → Rainbow
+            // 有值 → Rainbow（蓝→青→绿→黄→红）
             const t = (v - 2) / 253;
             const [r, g, b] = rainbowRGB(t);
             colBuf[i * 3]     = r;
@@ -640,13 +577,7 @@
           parseBin(merged.buffer);
 
           document.getElementById("cb-max").textContent =
-            meta.eps_p95.toFixed(4) + "+";
-          // disable vm button if no vm data
-          if (meta.magic !== "COL3" || meta.vm_p95 === 0) {
-            document.getElementById("btn-vm").disabled = true;
-            document.getElementById("btn-vm").style.opacity = "0.3";
-            document.getElementById("btn-vm").title = "需重新运行 extract_data.py 生成 COL3 格式";
-          }
+            meta.vm_p95.toFixed(1) + "+ MPa";
 
           prog.style.width = "90%";
           txt.textContent = "构建场景...";
