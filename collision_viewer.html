@@ -1,672 +1,484 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>碰撞仿真可视化</title>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      body {
-        background: #0a0a14;
-        color: #ccc;
-        font-family: -apple-system, sans-serif;
-        overflow: hidden;
-      }
-      #canvas-container {
-        width: 100vw;
-        height: 100vh;
-      }
-      #ui {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        padding: 16px 24px 20px;
-        background: linear-gradient(transparent, rgba(0, 0, 0, 0.88));
-        pointer-events: none;
-      }
-      #timeline-row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 10px;
-        pointer-events: all;
-      }
-      #btn-play {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        border: 1.5px solid rgba(255, 255, 255, 0.3);
-        background: rgba(255, 255, 255, 0.08);
-        color: #fff;
-        font-size: 14px;
-        cursor: pointer;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.15s;
-      }
-      #btn-play:hover {
-        background: rgba(255, 255, 255, 0.18);
-      }
-      #slider {
-        flex: 1;
-        -webkit-appearance: none;
-        height: 3px;
-        border-radius: 2px;
-        background: rgba(255, 255, 255, 0.15);
-        outline: none;
-        cursor: pointer;
-      }
-      #slider::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: #fff;
-        cursor: pointer;
-      }
-      #time-label {
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.5);
-        min-width: 75px;
-        text-align: right;
-        flex-shrink: 0;
-      }
-      #info-row {
-        display: flex;
-        align-items: center;
-        gap: 20px;
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.4);
-      }
-      .stat {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .stat-val {
-        font-size: 15px;
-        font-weight: 500;
-        color: rgba(255, 255, 255, 0.85);
-      }
-      #colorbar-wrap {
-        margin-left: auto;
-      }
-      #colorbar-title {
-        font-size: 10px;
-        color: rgba(255, 255, 255, 0.4);
-        margin-bottom: 3px;
-      }
-      #colorbar-row {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .cb-label {
-        font-size: 10px;
-        color: rgba(255, 255, 255, 0.35);
-      }
-      #colorbar-gradient {
-        width: 120px;
-        height: 8px;
-        border-radius: 2px;
-        background: linear-gradient(
-          to right,
-          #0000ff,
-          #00ffff,
-          #00ff00,
-          #ffff00,
-          #ff0000
-        );
-      }
-      #legend {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        font-size: 11px;
-        color: rgba(255, 255, 255, 0.4);
-        margin-left: 8px;
-      }
-      .legend-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 4px;
-      }
-      #top-bar {
-        position: absolute;
-        top: 16px;
-        left: 24px;
-        right: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        pointer-events: none;
-      }
-      #title {
-        font-size: 14px;
-        font-weight: 500;
-        color: rgba(255, 255, 255, 0.7);
-      }
-      #hint {
-        font-size: 11px;
-        color: rgba(255, 255, 255, 0.25);
-        text-align: right;
-        line-height: 1.7;
-      }
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>碰撞仿真可视化</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a14; color: #ccc; font-family: -apple-system, sans-serif; overflow: hidden; }
+#canvas-container { width: 100vw; height: 100vh; }
+#ui {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 16px 24px 20px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.88));
+  pointer-events: none;
+}
+#timeline-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  pointer-events: all;
+}
+.ctrl-btn {
+  width: 32px; height: 32px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7);
+  font-size: 13px; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.ctrl-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.ctrl-btn:active { transform: scale(0.95); }
+#btn-play {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.08); color: #fff;
+  font-size: 14px; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+#btn-play:hover { background: rgba(255,255,255,0.18); }
 
-      #loading {
-        position: absolute;
-        inset: 0;
-        background: #0a0a14;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 14px;
-        z-index: 10;
-      }
-      #loading-text {
-        font-size: 14px;
-        color: rgba(255, 255, 255, 0.5);
-      }
-      #progress-bar {
-        width: 240px;
-        height: 2px;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 1px;
-        overflow: hidden;
-      }
-      #progress-fill {
-        height: 100%;
-        background: #378add;
-        border-radius: 1px;
-        width: 0%;
-        transition: width 0.25s;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="loading">
-      <div id="loading-text">加载数据中...</div>
-      <div id="progress-bar"><div id="progress-fill"></div></div>
+/* 跳帧输入框 */
+#goto-wrap {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+}
+#goto-input {
+  width: 44px; height: 32px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.06); color: #fff;
+  font-size: 12px; text-align: center; outline: none;
+}
+#goto-input:focus { border-color: rgba(255,255,255,0.4); }
+#goto-label { font-size: 11px; color: rgba(255,255,255,0.35); }
+
+#slider {
+  flex: 1; -webkit-appearance: none;
+  height: 3px; border-radius: 2px;
+  background: rgba(255,255,255,0.15); outline: none; cursor: pointer;
+}
+#slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px;
+  border-radius: 50%; background: #fff; cursor: pointer;
+}
+#time-label { font-size: 12px; color: rgba(255,255,255,0.5); min-width: 75px; text-align: right; flex-shrink: 0; }
+
+#info-row { display: flex; align-items: center; gap: 16px; font-size: 12px; color: rgba(255,255,255,0.4); flex-wrap: wrap; }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat-val { font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.85); }
+
+#layer-btns { display: flex; gap: 6px; pointer-events: all; }
+.layer-btn {
+  padding: 4px 12px; font-size: 11px; border-radius: 20px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.5);
+  transition: all 0.15s;
+}
+.layer-btn.active { background: rgba(255,255,255,0.18); color: #fff; border-color: rgba(255,255,255,0.5); }
+.layer-btn:hover { background: rgba(255,255,255,0.12); }
+
+#colorbar-wrap { margin-left: auto; }
+#colorbar-title { font-size: 10px; color: rgba(255,255,255,0.4); margin-bottom: 3px; }
+#colorbar-row { display: flex; align-items: center; gap: 6px; }
+.cb-label { font-size: 10px; color: rgba(255,255,255,0.35); }
+#colorbar-gradient {
+  width: 120px; height: 8px; border-radius: 2px;
+  background: linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000);
+}
+#top-bar {
+  position: absolute; top: 16px; left: 24px; right: 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  pointer-events: none;
+}
+#title { font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.7); }
+#hint { font-size: 11px; color: rgba(255,255,255,0.25); text-align: right; line-height: 1.7; }
+
+#tooltip {
+  position: absolute;
+  background: rgba(10,10,20,0.92);
+  border: 0.5px solid rgba(255,255,255,0.2);
+  border-radius: 8px; padding: 10px 14px;
+  font-size: 12px; pointer-events: none; display: none;
+  min-width: 180px; line-height: 1.8;
+}
+#tooltip .tt-title { font-size: 11px; color: rgba(255,255,255,0.4); margin-bottom: 4px; }
+#tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; }
+#tooltip .tt-key { color: rgba(255,255,255,0.5); }
+#tooltip .tt-val { color: #fff; font-weight: 500; }
+
+#loading {
+  position: absolute; inset: 0; background: #0a0a14;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; z-index: 10;
+}
+#loading-text { font-size: 14px; color: rgba(255,255,255,0.5); }
+#progress-bar { width: 240px; height: 2px; background: rgba(255,255,255,0.1); border-radius: 1px; overflow: hidden; }
+#progress-fill { height: 100%; background: #378ADD; border-radius: 1px; width: 0%; transition: width 0.25s; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div id="loading-text">加载数据中...</div>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+</div>
+
+<div id="canvas-container"></div>
+<div id="tooltip">
+  <div class="tt-title">节点信息</div>
+  <div class="tt-row"><span class="tt-key">节点索引</span><span class="tt-val" id="tt-idx">—</span></div>
+  <div class="tt-row"><span class="tt-key">类型</span><span class="tt-val" id="tt-type">—</span></div>
+  <div class="tt-row"><span class="tt-key">应变/应力</span><span class="tt-val" id="tt-val">—</span></div>
+  <div class="tt-row"><span class="tt-key">位置 (x,y,z)</span><span class="tt-val" id="tt-pos">—</span></div>
+</div>
+
+<div id="top-bar">
+  <div id="title">碰撞仿真 — 等效塑性应变 / Von Mises</div>
+  <div id="hint">左键旋转 · 右键平移 · 滚轮缩放 · 点击节点查看数值</div>
+</div>
+
+<div id="ui">
+  <div id="timeline-row">
+    <button id="btn-play" class="ctrl-btn" style="width:36px;height:36px;border-radius:50%;border-width:1.5px;">▶</button>
+    <button class="ctrl-btn" id="btn-prev" title="上一帧">‹</button>
+    <button class="ctrl-btn" id="btn-next" title="下一帧">›</button>
+    <div id="goto-wrap">
+      <span id="goto-label">跳至</span>
+      <input type="number" id="goto-input" min="1" max="55" value="1" />
+      <span id="goto-label">帧</span>
+      <button class="ctrl-btn" id="btn-goto" style="width:auto;padding:0 8px;font-size:11px;">GO</button>
     </div>
-
-    <div id="canvas-container"></div>
-
-    <div id="top-bar">
-      <div id="title">碰撞仿真 — PEEQ 塑性应变 + Von Mises 应力</div>
-      <div id="hint">左键旋转 · 右键平移 · 滚轮缩放</div>
+    <input type="range" id="slider" min="0" max="54" value="0" step="1">
+    <div id="time-label">t = 0.000 s</div>
+  </div>
+  <div id="info-row">
+    <div class="stat"><span class="stat-val" id="stat-nodes">—</span><span>显示节点</span></div>
+    <div class="stat"><span class="stat-val" id="stat-frame">0 / 0</span><span>当前帧</span></div>
+    <div class="stat"><span class="stat-val" id="stat-fps">—</span><span>FPS</span></div>
+    <div id="layer-btns">
+      <button class="layer-btn active" data-layer="all">全部</button>
+      <button class="layer-btn" data-layer="body">车身</button>
+      <button class="layer-btn" data-layer="barrier">护栏</button>
     </div>
-
-    <div id="ui">
-      <div id="timeline-row">
-        <button id="btn-play">▶</button>
-        <input type="range" id="slider" min="0" max="54" value="0" step="1" />
-        <div id="time-label">t = 0.000 s</div>
-      </div>
-      <div id="info-row">
-        <div class="stat">
-          <span class="stat-val" id="stat-nodes">—</span><span>车身节点</span>
-        </div>
-        <div class="stat">
-          <span class="stat-val" id="stat-tires">—</span><span>轮胎圆环</span>
-        </div>
-        <div class="stat">
-          <span class="stat-val" id="stat-frame">0 / 0</span><span>当前帧</span>
-        </div>
-        <div class="stat">
-          <span class="stat-val" id="stat-fps">—</span><span>FPS</span>
-        </div>
-        <div id="legend">
-          <span
-            ><span
-              class="legend-dot"
-              style="
-                background: #22245a;
-                border: 0.5px solid rgba(255, 255, 255, 0.2);
-              "
-            ></span
-            >无变形</span
-          >
-          <span
-            ><span class="legend-dot" style="background: #e0e0e0"></span
-            >轮胎</span
-          >
-        </div>
-        <div id="colorbar-wrap">
-          <div id="colorbar-title">碰撞强度 PEEQ / Von Mises（蓝=低，红=高）</div>
-          <div id="colorbar-row">
-            <span class="cb-label">0</span>
-            <div id="colorbar-gradient"></div>
-            <span class="cb-label" id="cb-max">—</span>
-          </div>
-        </div>
+    <div id="colorbar-wrap">
+      <div id="colorbar-title">塑性应变 PEEQ / Von Mises（蓝=低，红=高）</div>
+      <div id="colorbar-row">
+        <span class="cb-label">0</span>
+        <div id="colorbar-gradient"></div>
+        <span class="cb-label" id="cb-max">—</span>
       </div>
     </div>
+  </div>
+</div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-      const DATA_URL = "collision_light.bin";
-      const FRAME_MS = 50;
-      const TIRE_OUTER_MIN_RADIUS = 550;
-      const TIRE_RPM = 300;
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const DATA_URL  = 'collision_light.bin';
+const FRAME_MS  = 50;
+const TIRE_OUTER_MIN_RADIUS = 550;
+const TIRE_RPM  = 300;
 
-      let meta = null;
-      let timesArr = null;
-      let posFrames = null;
-      let valFrames = null;
-      let tireFrames = null;
+let displayMode = 'all';
+let meta = null, timesArr = null, posFrames = null;
+let valFrames = null, layerArr = null, tireFrames = null;
 
-      function parseBin(buffer) {
-        const view = new DataView(buffer);
-        let off = 0;
+function parseBin(buffer) {
+  const view = new DataView(buffer);
+  let off = 0;
+  const magic = String.fromCharCode(view.getUint8(0),view.getUint8(1),view.getUint8(2),view.getUint8(3));
+  if (magic !== 'COL2') throw new Error(`magic="${magic}"，请重新生成 collision_light.bin`);
+  off = 4;
+  const n_frames = view.getInt32(off,true); off+=4;
+  const n_nodes  = view.getInt32(off,true); off+=4;
+  const n_tires  = view.getInt32(off,true); off+=4;
+  const eps_p95  = view.getFloat32(off,true); off+=4;
+  const vm_p95   = view.getFloat32(off,true); off+=4;
+  meta = { n_frames, n_nodes, n_tires, eps_p95, vm_p95 };
 
-        const magic = String.fromCharCode(
-          view.getUint8(0),
-          view.getUint8(1),
-          view.getUint8(2),
-          view.getUint8(3),
-        );
-        if (magic !== "COL2")
-          throw new Error(`magic="${magic}"，请重新生成 collision_light.bin`);
-        off = 4;
+  timesArr = new Float32Array(n_frames);
+  for (let i=0;i<n_frames;i++) { timesArr[i]=view.getFloat32(off,true); off+=4; }
 
-        const n_frames = view.getInt32(off, true); off += 4;
-        const n_nodes  = view.getInt32(off, true); off += 4;
-        const n_tires  = view.getInt32(off, true); off += 4;
-        const eps_p95  = view.getFloat32(off, true); off += 4;  // shell PEEQ P95
-        const vm_p95   = view.getFloat32(off, true); off += 4;  // solid Von Mises P95
+  posFrames=[]; valFrames=[];
+  for (let f=0;f<n_frames;f++) {
+    const pArr=new Float32Array(n_nodes*3);
+    for (let i=0;i<n_nodes*3;i++) { pArr[i]=view.getFloat32(off,true); off+=4; }
+    posFrames.push(pArr);
+    const vArr=new Uint8Array(n_nodes);
+    for (let i=0;i<n_nodes;i++) { vArr[i]=view.getUint8(off); off+=1; }
+    valFrames.push(vArr);
+  }
+  tireFrames=[];
+  for (let f=0;f<n_frames;f++) {
+    const tArr=new Float32Array(n_tires*8);
+    for (let i=0;i<n_tires*8;i++) { tArr[i]=view.getFloat32(off,true); off+=4; }
+    tireFrames.push(tArr);
+  }
+  layerArr=new Uint8Array(n_nodes);
+  for (let i=0;i<n_nodes;i++) { layerArr[i]=view.getUint8(off); off+=1; }
+}
 
-        meta = { n_frames, n_nodes, n_tires, eps_p95, vm_p95 };
+const container = document.getElementById('canvas-container');
+const renderer  = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setClearColor(0x0a0a14);
+container.appendChild(renderer.domElement);
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45,window.innerWidth/window.innerHeight,0.1,1e7);
 
-        timesArr = new Float32Array(n_frames);
-        for (let i = 0; i < n_frames; i++) {
-          timesArr[i] = view.getFloat32(off, true);
-          off += 4;
-        }
+const orb = (() => {
+  const sph={theta:0.4,phi:1.1,r:5000};
+  const tgt=new THREE.Vector3();
+  let state='idle',px=0,py=0;
+  function sync() {
+    camera.position.set(
+      tgt.x+sph.r*Math.sin(sph.phi)*Math.sin(sph.theta),
+      tgt.y+sph.r*Math.cos(sph.phi),
+      tgt.z+sph.r*Math.sin(sph.phi)*Math.cos(sph.theta));
+    camera.lookAt(tgt);
+  }
+  renderer.domElement.addEventListener('mousedown',e=>{state=e.button===2?'pan':'rotate';px=e.clientX;py=e.clientY;});
+  window.addEventListener('mouseup',()=>state='idle');
+  window.addEventListener('mousemove',e=>{
+    if(state==='idle') return;
+    const dx=e.clientX-px,dy=e.clientY-py; px=e.clientX;py=e.clientY;
+    if(state==='rotate'){sph.theta-=dx*0.005;sph.phi=Math.max(0.05,Math.min(Math.PI-0.05,sph.phi-dy*0.005));}
+    else{
+      const dir=new THREE.Vector3().subVectors(camera.position,tgt).normalize();
+      const right=new THREE.Vector3().crossVectors(dir,camera.up).normalize();
+      const up=new THREE.Vector3().crossVectors(right,dir).normalize();
+      const k=sph.r*0.001;
+      tgt.addScaledVector(right,-dx*k);tgt.addScaledVector(up,dy*k);
+    }
+    sync();
+  });
+  renderer.domElement.addEventListener('wheel',e=>{sph.r=Math.max(10,Math.min(1e6,sph.r*(1+e.deltaY*0.001)));sync();e.preventDefault();},{passive:false});
+  renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
+  sync();
+  return{setTarget:v=>{tgt.copy(v);sync();},setR:r=>{sph.r=r;sync();}};
+})();
 
-        posFrames = [];
-        valFrames = [];
-        for (let f = 0; f < n_frames; f++) {
-          const pArr = new Float32Array(n_nodes * 3);
-          for (let i = 0; i < n_nodes * 3; i++) {
-            pArr[i] = view.getFloat32(off, true);
-            off += 4;
-          }
-          posFrames.push(pArr);
-          const vArr = new Uint8Array(n_nodes);
-          for (let i = 0; i < n_nodes; i++) {
-            vArr[i] = view.getUint8(off);
-            off += 1;
-          }
-          valFrames.push(vArr);
-        }
+function rainbowRGB(t) {
+  t=Math.max(0,Math.min(1,t));
+  let r,g,b;
+  if(t<0.25){const s=t/0.25;r=0;g=s;b=1;}
+  else if(t<0.5){const s=(t-0.25)/0.25;r=0;g=1;b=1-s;}
+  else if(t<0.75){const s=(t-0.5)/0.25;r=s;g=1;b=0;}
+  else{const s=(t-0.75)/0.25;r=1;g=1-s;b=0;}
+  return[r,g,b];
+}
 
-        tireFrames = [];
-        for (let f = 0; f < n_frames; f++) {
-          const tArr = new Float32Array(n_tires * 8);
-          for (let i = 0; i < n_tires * 8; i++) {
-            tArr[i] = view.getFloat32(off, true);
-            off += 4;
-          }
-          tireFrames.push(tArr);
-        }
-      }
+let bodyCloud=null,posBuf=null,colBuf=null;
+function buildBodyCloud(n) {
+  const geo=new THREE.BufferGeometry();
+  posBuf=new Float32Array(n*3); colBuf=new Float32Array(n*3);
+  geo.setAttribute('position',new THREE.BufferAttribute(posBuf,3));
+  geo.setAttribute('color',new THREE.BufferAttribute(colBuf,3));
+  bodyCloud=new THREE.Points(geo,new THREE.PointsMaterial({size:2.5,vertexColors:true,sizeAttenuation:true}));
+  scene.add(bodyCloud);
+}
 
-      const container = document.getElementById("canvas-container");
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setClearColor(0x0a0a14);
-      container.appendChild(renderer.domElement);
+let tireMeshes=[],tireAngle=0;
+function buildTireMeshes() {
+  const t0=tireFrames[0];
+  for(let ti=0;ti<meta.n_tires;ti++){
+    const base=ti*8,radius=t0[base+6],width=t0[base+7];
+    if(radius<TIRE_OUTER_MIN_RADIUS) continue;
+    const tube=Math.max(width*0.45,20);
+    const mesh=new THREE.Mesh(new THREE.TorusGeometry(radius,tube,10,36),
+      new THREE.MeshBasicMaterial({color:0x2a3080,wireframe:true,transparent:true,opacity:0.9}));
+    scene.add(mesh); tireMeshes.push({mesh,ti});
+  }
+}
 
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(
-        45,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        1e7,
-      );
+function updateTireMeshes(fi) {
+  const t=tireFrames[fi];
+  tireAngle+=(TIRE_RPM/60)*(FRAME_MS/1000)*Math.PI*2;
+  for(let k=0;k<tireMeshes.length;k++){
+    const{mesh,ti}=tireMeshes[k],base=ti*8;
+    mesh.position.set(t[base],t[base+1],t[base+2]);
+    const axis=new THREE.Vector3(t[base+3],t[base+4],t[base+5]).normalize();
+    const qAlign=new THREE.Quaternion();qAlign.setFromUnitVectors(new THREE.Vector3(0,0,1),axis);
+    const qSpin=new THREE.Quaternion();qSpin.setFromAxisAngle(axis,tireAngle);
+    mesh.quaternion.copy(qSpin.multiply(qAlign));
+  }
+}
 
-      const orb = (() => {
-        const sph = { theta: 0.4, phi: 1.1, r: 5000 };
-        const tgt = new THREE.Vector3();
-        let state = "idle",
-          px = 0,
-          py = 0;
-        function sync() {
-          camera.position.set(
-            tgt.x + sph.r * Math.sin(sph.phi) * Math.sin(sph.theta),
-            tgt.y + sph.r * Math.cos(sph.phi),
-            tgt.z + sph.r * Math.sin(sph.phi) * Math.cos(sph.theta),
-          );
-          camera.lookAt(tgt);
-        }
-        renderer.domElement.addEventListener("mousedown", (e) => {
-          state = e.button === 2 ? "pan" : "rotate";
-          px = e.clientX;
-          py = e.clientY;
-        });
-        window.addEventListener("mouseup", () => (state = "idle"));
-        window.addEventListener("mousemove", (e) => {
-          if (state === "idle") return;
-          const dx = e.clientX - px,
-            dy = e.clientY - py;
-          px = e.clientX;
-          py = e.clientY;
-          if (state === "rotate") {
-            sph.theta -= dx * 0.005;
-            sph.phi = Math.max(
-              0.05,
-              Math.min(Math.PI - 0.05, sph.phi - dy * 0.005),
-            );
-          } else {
-            const dir = new THREE.Vector3()
-              .subVectors(camera.position, tgt)
-              .normalize();
-            const right = new THREE.Vector3()
-              .crossVectors(dir, camera.up)
-              .normalize();
-            const up = new THREE.Vector3().crossVectors(right, dir).normalize();
-            const k = sph.r * 0.001;
-            tgt.addScaledVector(right, -dx * k);
-            tgt.addScaledVector(up, dy * k);
-          }
-          sync();
-        });
-        renderer.domElement.addEventListener(
-          "wheel",
-          (e) => {
-            sph.r = Math.max(10, Math.min(1e6, sph.r * (1 + e.deltaY * 0.001)));
-            sync();
-            e.preventDefault();
-          },
-          { passive: false },
-        );
-        renderer.domElement.addEventListener("contextmenu", (e) =>
-          e.preventDefault(),
-        );
-        sync();
-        return {
-          setTarget: (v) => {
-            tgt.copy(v);
-            sync();
-          },
-          setR: (r) => {
-            sph.r = r;
-            sync();
-          },
-        };
-      })();
+let curFrame=0;
 
-      // 业界标准 Rainbow：蓝→青→绿→黄→红
-      function rainbowRGB(t) {
-        t = Math.max(0, Math.min(1, t));
-        let r, g, b;
-        if (t < 0.25) {
-          const s = t / 0.25;
-          r = 0;
-          g = s;
-          b = 1;
-        } else if (t < 0.5) {
-          const s = (t - 0.25) / 0.25;
-          r = 0;
-          g = 1;
-          b = 1 - s;
-        } else if (t < 0.75) {
-          const s = (t - 0.5) / 0.25;
-          r = s;
-          g = 1;
-          b = 0;
-        } else {
-          const s = (t - 0.75) / 0.25;
-          r = 1;
-          g = 1 - s;
-          b = 0;
-        }
-        return [r, g, b];
-      }
+function applyFrame(fi) {
+  if(!bodyCloud) return;
+  curFrame=fi;
+  const{n_nodes}=meta,pos=posFrames[fi],val=valFrames[fi];
+  let visible=0;
+  for(let i=0;i<n_nodes;i++){
+    const layer=layerArr[i];
+    const isBarrier=(layer===0);
+    let hide=false;
+    if(displayMode==='body'&&isBarrier) hide=true;
+    if(displayMode==='barrier'&&!isBarrier) hide=true;
+    const i3=i*3;
+    posBuf[i3]=pos[i3];posBuf[i3+1]=pos[i3+1];posBuf[i3+2]=pos[i3+2];
+    if(hide){colBuf[i3]=0;colBuf[i3+1]=0;colBuf[i3+2]=0;}
+    else{
+      visible++;
+      const v=val[i];
+      if(v<2){colBuf[i3]=0.12;colBuf[i3+1]=0.14;colBuf[i3+2]=0.35;}
+      else{const[r,g,b]=rainbowRGB((v-2)/253);colBuf[i3]=r;colBuf[i3+1]=g;colBuf[i3+2]=b;}
+    }
+  }
+  bodyCloud.geometry.attributes.position.needsUpdate=true;
+  bodyCloud.geometry.attributes.color.needsUpdate=true;
+  updateTireMeshes(fi);
 
-      let bodyCloud = null,
-        posBuf = null,
-        colBuf = null;
+  // 同步所有控件
+  document.getElementById('slider').value           = fi;
+  document.getElementById('goto-input').value       = fi + 1;
+  document.getElementById('time-label').textContent = `t = ${timesArr[fi].toFixed(3)} s`;
+  document.getElementById('stat-frame').textContent = `${fi+1} / ${meta.n_frames}`;
+  document.getElementById('stat-nodes').textContent = visible.toLocaleString();
+}
 
-      function buildBodyCloud(n) {
-        const geo = new THREE.BufferGeometry();
-        posBuf = new Float32Array(n * 3);
-        colBuf = new Float32Array(n * 3);
-        geo.setAttribute("position", new THREE.BufferAttribute(posBuf, 3));
-        geo.setAttribute("color", new THREE.BufferAttribute(colBuf, 3));
-        bodyCloud = new THREE.Points(
-          geo,
-          new THREE.PointsMaterial({
-            size: 2.5,
-            vertexColors: true,
-            sizeAttenuation: true,
-          }),
-        );
-        scene.add(bodyCloud);
-      }
+// ---- 帧控制按钮 ----
+document.getElementById('btn-prev').addEventListener('click', () => {
+  if (!meta) return;
+  applyFrame(Math.max(0, curFrame - 1));
+});
+document.getElementById('btn-next').addEventListener('click', () => {
+  if (!meta) return;
+  applyFrame(Math.min(meta.n_frames - 1, curFrame + 1));
+});
+document.getElementById('btn-goto').addEventListener('click', () => {
+  if (!meta) return;
+  const v = parseInt(document.getElementById('goto-input').value);
+  if (!isNaN(v)) applyFrame(Math.max(0, Math.min(meta.n_frames - 1, v - 1)));
+});
+document.getElementById('goto-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-goto').click();
+});
 
-      let tireMeshes = [];
-      let tireAngle = 0;
+// 键盘左右方向键
+window.addEventListener('keydown', e => {
+  if (!meta) return;
+  if (e.key === 'ArrowLeft')  applyFrame(Math.max(0, curFrame - 1));
+  if (e.key === 'ArrowRight') applyFrame(Math.min(meta.n_frames - 1, curFrame + 1));
+});
 
-      function buildTireMeshes() {
-        const t0 = tireFrames[0];
-        for (let ti = 0; ti < meta.n_tires; ti++) {
-          const base = ti * 8;
-          const radius = t0[base + 6];
-          const width = t0[base + 7];
-          if (radius < TIRE_OUTER_MIN_RADIUS) continue;
-          const tube = Math.max(width * 0.45, 20);
-          const geo = new THREE.TorusGeometry(radius, tube, 10, 36);
-          const mesh = new THREE.Mesh(
-            geo,
-            new THREE.MeshBasicMaterial({
-              color: 0x2a3080,
-              wireframe: true,
-              transparent: true,
-              opacity: 0.9,
-            }),
-          );
-          scene.add(mesh);
-          tireMeshes.push({ mesh, ti });
-        }
-        document.getElementById("stat-tires").textContent = tireMeshes.length;
-      }
+// ---- 点击检测 ----
+const raycaster=new THREE.Raycaster();
+raycaster.params.Points.threshold=15;
+const mouse=new THREE.Vector2();
+const tooltip=document.getElementById('tooltip');
+let isDragging=false,mouseDownPos={x:0,y:0};
 
-      function updateTireMeshes(fi) {
-        const t = tireFrames[fi];
-        tireAngle += (TIRE_RPM / 60) * (FRAME_MS / 1000) * Math.PI * 2;
-        for (let k = 0; k < tireMeshes.length; k++) {
-          const { mesh, ti } = tireMeshes[k];
-          const base = ti * 8;
-          const cx = t[base],
-            cy = t[base + 1],
-            cz = t[base + 2];
-          const ax = t[base + 3],
-            ay = t[base + 4],
-            az = t[base + 5];
-          mesh.position.set(cx, cy, cz);
-          const axis = new THREE.Vector3(ax, ay, az).normalize();
-          const qAlign = new THREE.Quaternion();
-          qAlign.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
-          const qSpin = new THREE.Quaternion();
-          qSpin.setFromAxisAngle(axis, tireAngle);
-          mesh.quaternion.copy(qSpin.multiply(qAlign));
-        }
-      }
+renderer.domElement.addEventListener('mousedown',e=>{
+  mouseDownPos={x:e.clientX,y:e.clientY};
+  isDragging=false;
+  tooltip.style.display='none';
+});
+renderer.domElement.addEventListener('mousemove',e=>{
+  const dx=e.clientX-mouseDownPos.x,dy=e.clientY-mouseDownPos.y;
+  if(Math.sqrt(dx*dx+dy*dy)>4) isDragging=true;
+});
+renderer.domElement.addEventListener('click',e=>{
+  if(isDragging||!bodyCloud) return;
+  mouse.x=(e.clientX/window.innerWidth)*2-1;
+  mouse.y=-(e.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+  const hits=raycaster.intersectObject(bodyCloud);
+  if(hits.length===0){tooltip.style.display='none';return;}
+  const idx=hits[0].index;
+  const val=valFrames[curFrame][idx];
+  const layer=layerArr[idx];
+  const pos=posFrames[curFrame];
+  let valStr,typeStr;
+  if(layer===0){
+    typeStr='护栏（Von Mises）';
+    valStr=val<2?'0 MPa（无应力）':`${((val-2)/253*meta.vm_p95).toFixed(2)} MPa`;
+  }else{
+    typeStr='车身（PEEQ）';
+    valStr=val<2?'0（无塑性变形）':`${((val-2)/253*meta.eps_p95).toFixed(5)}`;
+  }
+  document.getElementById('tt-idx').textContent  = idx;
+  document.getElementById('tt-type').textContent = typeStr;
+  document.getElementById('tt-val').textContent  = valStr;
+  document.getElementById('tt-pos').textContent  =
+    `${pos[idx*3].toFixed(1)}, ${pos[idx*3+1].toFixed(1)}, ${pos[idx*3+2].toFixed(1)}`;
+  const tx=Math.min(e.clientX+16,window.innerWidth-210);
+  const ty=Math.min(e.clientY-10,window.innerHeight-130);
+  tooltip.style.left=tx+'px';tooltip.style.top=ty+'px';
+  tooltip.style.display='block';
+});
 
-      function applyFrame(fi) {
-        if (!bodyCloud) return;
-        const { n_nodes } = meta;
-        const pos = posFrames[fi];
-        const val = valFrames[fi];
+// ---- 切换按钮 ----
+document.querySelectorAll('.layer-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.layer-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    displayMode=btn.dataset.layer;
+    applyFrame(curFrame);
+  });
+});
 
-        posBuf.set(pos);
+// ---- 加载 ----
+async function load() {
+  const prog=document.getElementById('progress-fill');
+  const txt=document.getElementById('loading-text');
+  try {
+    txt.textContent='下载数据...';prog.style.width='10%';
+    const resp=await fetch(DATA_URL);
+    if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const total=parseInt(resp.headers.get('content-length')||'0');
+    const reader=resp.body.getReader();
+    const chunks=[];let received=0;
+    while(true){const{done,value}=await reader.read();if(done)break;chunks.push(value);received+=value.length;if(total)prog.style.width=(10+65*received/total).toFixed(0)+'%';}
+    prog.style.width='78%';txt.textContent='解析数据...';
+    const merged=new Uint8Array(received);let o=0;
+    for(const c of chunks){merged.set(c,o);o+=c.length;}
+    parseBin(merged.buffer);
+    document.getElementById('cb-max').textContent=`P95: ${meta.eps_p95.toFixed(4)} / ${meta.vm_p95.toFixed(1)}MPa`;
+    document.getElementById('goto-input').max=meta.n_frames;
+    prog.style.width='90%';txt.textContent='构建场景...';
+    buildBodyCloud(meta.n_nodes);buildTireMeshes();
+    const p0=posFrames[0],step=Math.max(1,Math.floor(meta.n_nodes/2000));
+    let cx=0,cy=0,cz=0,cnt=0,maxD=0;
+    for(let i=0;i<meta.n_nodes;i+=step){cx+=p0[i*3];cy+=p0[i*3+1];cz+=p0[i*3+2];cnt++;}
+    cx/=cnt;cy/=cnt;cz/=cnt;
+    for(let i=0;i<meta.n_nodes;i+=step){const dx=p0[i*3]-cx,dy=p0[i*3+1]-cy,dz=p0[i*3+2]-cz;maxD=Math.max(maxD,Math.sqrt(dx*dx+dy*dy+dz*dz));}
+    orb.setTarget(new THREE.Vector3(cx,cy,cz));orb.setR(maxD*2.2);
+    document.getElementById('slider').max=meta.n_frames-1;
+    applyFrame(0);
+    prog.style.width='100%';
+    setTimeout(()=>document.getElementById('loading').style.display='none',250);
+  } catch(err){
+    txt.textContent=`加载失败：${err.message}`;txt.style.color='#e53935';console.error(err);
+  }
+}
 
-        for (let i = 0; i < n_nodes; i++) {
-          const v = val[i];
-          if (v < 2) {
-            // 无变形/应力 → 暗蓝紫色轮廓
-            colBuf[i * 3]     = 0.12;
-            colBuf[i * 3 + 1] = 0.14;
-            colBuf[i * 3 + 2] = 0.35;
-          } else {
-            // 有值 → Rainbow（蓝→青→绿→黄→红）
-            const t = (v - 2) / 253;
-            const [r, g, b] = rainbowRGB(t);
-            colBuf[i * 3]     = r;
-            colBuf[i * 3 + 1] = g;
-            colBuf[i * 3 + 2] = b;
-          }
-        }
+// ---- 播放 ----
+let playing=false,lastT=0;
+const fps={n:0,last:performance.now()};
+document.getElementById('btn-play').addEventListener('click',()=>{
+  playing=!playing;
+  document.getElementById('btn-play').textContent=playing?'⏸':'▶';
+  if(playing)lastT=performance.now();
+});
+document.getElementById('slider').addEventListener('input',function(){applyFrame(parseInt(this.value));});
 
-        bodyCloud.geometry.attributes.position.needsUpdate = true;
-        bodyCloud.geometry.attributes.color.needsUpdate = true;
+function loop(now) {
+  requestAnimationFrame(loop);
+  fps.n++;
+  if(now-fps.last>600){document.getElementById('stat-fps').textContent=Math.round(fps.n/((now-fps.last)/1000));fps.n=0;fps.last=now;}
+  if(playing&&meta&&now-lastT>=FRAME_MS){applyFrame((curFrame+1)%meta.n_frames);lastT=now;}
+  renderer.render(scene,camera);
+}
 
-        updateTireMeshes(fi);
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
 
-        document.getElementById("slider").value = fi;
-        document.getElementById("time-label").textContent =
-          `t = ${timesArr[fi].toFixed(3)} s`;
-        document.getElementById("stat-frame").textContent =
-          `${fi + 1} / ${meta.n_frames}`;
-      }
-
-      async function load() {
-        const prog = document.getElementById("progress-fill");
-        const txt = document.getElementById("loading-text");
-        try {
-          txt.textContent = "下载数据...";
-          prog.style.width = "10%";
-
-          const resp = await fetch(DATA_URL);
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-          const total = parseInt(resp.headers.get("content-length") || "0");
-          const reader = resp.body.getReader();
-          const chunks = [];
-          let received = 0;
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            received += value.length;
-            if (total)
-              prog.style.width =
-                (10 + (65 * received) / total).toFixed(0) + "%";
-          }
-
-          prog.style.width = "78%";
-          txt.textContent = "解析数据...";
-          const merged = new Uint8Array(received);
-          let o = 0;
-          for (const c of chunks) {
-            merged.set(c, o);
-            o += c.length;
-          }
-          parseBin(merged.buffer);
-
-          document.getElementById("cb-max").textContent =
-            meta.vm_p95.toFixed(1) + "+ MPa";
-
-          prog.style.width = "90%";
-          txt.textContent = "构建场景...";
-          buildBodyCloud(meta.n_nodes);
-          buildTireMeshes();
-
-          const p0 = posFrames[0];
-          const step = Math.max(1, Math.floor(meta.n_nodes / 2000));
-          let cx = 0,
-            cy = 0,
-            cz = 0,
-            cnt = 0,
-            maxD = 0;
-          for (let i = 0; i < meta.n_nodes; i += step) {
-            cx += p0[i * 3];
-            cy += p0[i * 3 + 1];
-            cz += p0[i * 3 + 2];
-            cnt++;
-          }
-          cx /= cnt;
-          cy /= cnt;
-          cz /= cnt;
-          for (let i = 0; i < meta.n_nodes; i += step) {
-            const dx = p0[i * 3] - cx,
-              dy = p0[i * 3 + 1] - cy,
-              dz = p0[i * 3 + 2] - cz;
-            maxD = Math.max(maxD, Math.sqrt(dx * dx + dy * dy + dz * dz));
-          }
-          orb.setTarget(new THREE.Vector3(cx, cy, cz));
-          orb.setR(maxD * 2.2);
-
-          document.getElementById("slider").max = meta.n_frames - 1;
-          document.getElementById("stat-nodes").textContent =
-            meta.n_nodes.toLocaleString();
-
-          applyFrame(0);
-          prog.style.width = "100%";
-          setTimeout(
-            () => (document.getElementById("loading").style.display = "none"),
-            250,
-          );
-        } catch (err) {
-          txt.textContent = `加载失败：${err.message}`;
-          txt.style.color = "#e53935";
-          console.error(err);
-        }
-      }
-
-      let playing = false,
-        curFrame = 0,
-        lastT = 0;
-      const fps = { n: 0, last: performance.now() };
-
-      document.getElementById("btn-play").addEventListener("click", () => {
-        playing = !playing;
-        document.getElementById("btn-play").textContent = playing ? "⏸" : "▶";
-        if (playing) lastT = performance.now();
-      });
-      document.getElementById("slider").addEventListener("input", function () {
-        curFrame = parseInt(this.value);
-        applyFrame(curFrame);
-      });
-
-      function loop(now) {
-        requestAnimationFrame(loop);
-        fps.n++;
-        if (now - fps.last > 600) {
-          document.getElementById("stat-fps").textContent = Math.round(
-            fps.n / ((now - fps.last) / 1000),
-          );
-          fps.n = 0;
-          fps.last = now;
-        }
-        if (playing && meta && now - lastT >= FRAME_MS) {
-          curFrame = (curFrame + 1) % meta.n_frames;
-          applyFrame(curFrame);
-          lastT = now;
-        }
-        renderer.render(scene, camera);
-      }
-
-      window.addEventListener("resize", () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      });
-
-      load();
-      requestAnimationFrame(loop);
-    </script>
-  </body>
+load();requestAnimationFrame(loop);
+</script>
+</body>
 </html>
