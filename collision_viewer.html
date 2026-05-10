@@ -171,7 +171,8 @@ body { background: #0a0a14; color: #ccc; font-family: -apple-system, sans-serif;
 .track-label { font-size: 11px; color: rgba(255,255,255,0.7); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .track-remove { font-size: 13px; color: rgba(255,255,255,0.2); cursor: pointer; padding: 0 2px; flex-shrink: 0; }
 .track-remove:hover { color: #ff5555; }
-.track-val { font-size: 10px; color: rgba(255,255,255,0.4); padding-left: 16px; margin-bottom: 6px; }
+.track-val { font-size: 12px; color: rgba(255,255,255,0.75); padding-left: 16px; margin-bottom: 2px; font-weight: 500; }
+.track-meta { font-size: 10px; color: rgba(255,255,255,0.3); padding-left: 16px; margin-bottom: 6px; }
 .track-curve-btn {
   padding: 4px 0; font-size: 10px; border-radius: 5px; cursor: pointer;
   border: 1px solid rgba(255,255,255,0.12);
@@ -179,16 +180,17 @@ body { background: #0a0a14; color: #ccc; font-family: -apple-system, sans-serif;
   width: 100%; text-align: center; transition: all 0.15s;
 }
 .track-curve-btn:hover { background: rgba(55,138,221,0.2); color: #7bc4ff; border-color: rgba(55,138,221,0.35); }
-
-/* Tooltip 跟踪按钮 */
-#tt-track-btn {
-  margin-top: 8px; padding: 5px; font-size: 10px; border-radius: 5px; cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.15);
-  background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.55);
-  width: 100%; text-align: center; transition: all 0.15s; display: block;
+.track-btns { display: flex; gap: 5px; }
+.track-curve-btn, .track-locate-btn { flex: 1; }
+.track-locate-btn {
+  padding: 4px 0; font-size: 10px; border-radius: 5px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.5);
+  text-align: center; transition: all 0.15s;
 }
-#tt-track-btn:hover { background: rgba(55,138,221,0.2); color: #7bc4ff; border-color: rgba(55,138,221,0.3); }
-#tt-track-btn.tracked { background: rgba(55,200,100,0.15); color: #7bffaa; border-color: rgba(55,200,100,0.3); }
+.track-locate-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.track-locate-btn.hidden-marker { color: rgba(255,255,255,0.25); }
+
 
 /* 应力曲线弹窗 */
 #chart-modal {
@@ -206,22 +208,28 @@ body { background: #0a0a14; color: #ccc; font-family: -apple-system, sans-serif;
 #chart-close:hover { color: #fff; }
 #chart-canvas { width: 100%; display: block; border-radius: 4px; }
 
+#tooltip {
+  position: absolute; background: rgba(10,10,20,0.93);
+  border: 0.5px solid rgba(255,255,255,0.18); border-radius: 8px;
+  padding: 10px 13px; font-size: 11px; pointer-events: all;
+  display: none; min-width: 185px; line-height: 1.8; z-index: 10;
+}
+#tooltip .tt-title { font-size: 11px; font-weight: 500; color: #fff; margin-bottom: 4px; }
+#tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; }
+#tooltip .tt-key { color: rgba(255,255,255,0.45); }
+#tooltip .tt-val { color: #fff; font-weight: 500; }
+#tt-curve-btn {
+  margin-top: 8px; padding: 5px; font-size: 10px; border-radius: 5px; cursor: pointer;
+  border: 1px solid rgba(55,138,221,0.3); background: rgba(55,138,221,0.12);
+  color: #7bc4ff; width: 100%; text-align: center; transition: all 0.15s; display: block;
+}
+#tt-curve-btn:hover { background: rgba(55,138,221,0.25); }
 #top-bar {
   position: absolute; top: 12px; left: 12px; right: 12px;
   display: flex; align-items: center; justify-content: space-between; pointer-events: none;
 }
 #title { font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.65); }
 #hint { font-size: 10px; color: rgba(255,255,255,0.2); text-align: right; line-height: 1.7; }
-#tooltip {
-  position: absolute; background: rgba(10,10,20,0.93);
-  border: 0.5px solid rgba(255,255,255,0.18); border-radius: 8px;
-  padding: 9px 13px; font-size: 11px; pointer-events: none;
-  display: none; min-width: 175px; line-height: 1.8; z-index: 10;
-}
-#tooltip .tt-title { font-size: 10px; color: rgba(255,255,255,0.35); margin-bottom: 3px; }
-#tooltip .tt-row { display: flex; justify-content: space-between; gap: 14px; }
-#tooltip .tt-key { color: rgba(255,255,255,0.45); }
-#tooltip .tt-val { color: #fff; font-weight: 500; }
 #loading {
   position: absolute; inset: 0; background: #0a0a14;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -334,17 +342,17 @@ body { background: #0a0a14; color: #ccc; font-family: -apple-system, sans-serif;
 <div id="main">
   <div id="canvas-container"></div>
   <div id="tooltip">
-    <div class="tt-title">节点信息</div>
+    <div class="tt-title" id="tt-label">—</div>
     <div class="tt-row"><span class="tt-key">Part ID</span><span class="tt-val" id="tt-part">—</span></div>
     <div class="tt-row"><span class="tt-key">区域</span><span class="tt-val" id="tt-zone">—</span></div>
     <div class="tt-row"><span class="tt-key">类型</span><span class="tt-val" id="tt-type">—</span></div>
-    <div class="tt-row"><span class="tt-key">应变/应力</span><span class="tt-val" id="tt-val">—</span></div>
+    <div class="tt-row"><span class="tt-key">应力/应变</span><span class="tt-val" id="tt-val">—</span></div>
     <div class="tt-row"><span class="tt-key">位置</span><span class="tt-val" id="tt-pos">—</span></div>
-    <button id="tt-track-btn">📌 跟踪此点</button>
+    <button id="tt-curve-btn">📈 应力曲线</button>
   </div>
   <div id="top-bar">
     <div id="title">碰撞仿真 — PEEQ / Von Mises</div>
-    <div id="hint">左键旋转 · 右键平移 · 滚轮缩放 · 点击节点查看</div>
+    <div id="hint">左键旋转 · 右键平移 · 滚轮缩放</div>
   </div>
   <div id="ui">
     <div id="timeline-row">
@@ -563,7 +571,7 @@ let curFrame=0;
 // ---- 跟踪点 ----
 const TRACK_COLORS=['#FF4455','#44FF88','#FFD700','#00FFFF','#FF88FF','#FF9944'];
 let trackedPoints=[]; // {idx, label, color}
-let trackCloud=null;
+let trackSpheres=[];  // [{inner, outer}]
 let lastClickedIdx=-1;
 
 function nodeStressStr(idx,fi){
@@ -572,22 +580,37 @@ function nodeStressStr(idx,fi){
   return layer===0?`${((raw-2)/253*meta.vm_p95).toFixed(2)} MPa`:`${((raw-2)/253*meta.eps_p95).toFixed(5)}`;
 }
 
+const SPHERE_R=45; // 球体半径（模型单位）
+const _sphereGeo=new THREE.SphereGeometry(1,16,12);
+const _ringGeo=new THREE.SphereGeometry(1,10,8);
+
 function updateTrackMarkers(){
-  if(trackCloud){scene.remove(trackCloud);trackCloud.geometry.dispose();trackCloud=null;}
+  // 移除旧球体
+  trackSpheres.forEach(({inner,outer})=>{scene.remove(inner);scene.remove(outer);});
+  trackSpheres=[];
   if(!trackedPoints.length||!meta)return;
-  const n=trackedPoints.length;
-  const posArr=new Float32Array(n*3),colArr=new Float32Array(n*3);
   const p=posFrames[curFrame];
-  trackedPoints.forEach((tp,i)=>{
-    posArr[i*3]=p[tp.idx*3];posArr[i*3+1]=p[tp.idx*3+1];posArr[i*3+2]=p[tp.idx*3+2];
-    const c=new THREE.Color(tp.color);
-    colArr[i*3]=c.r;colArr[i*3+1]=c.g;colArr[i*3+2]=c.b;
+  trackedPoints.forEach((tp,tpIdx)=>{
+    if(tp.hidden)return;
+    const x=p[tp.idx*3],y=p[tp.idx*3+1],z=p[tp.idx*3+2];
+    const col=new THREE.Color(tp.color);
+    const inner=new THREE.Mesh(_sphereGeo,new THREE.MeshBasicMaterial({
+      color:col,depthTest:false,transparent:true,opacity:0.85
+    }));
+    inner.scale.setScalar(SPHERE_R);
+    inner.position.set(x,y,z);
+    inner.renderOrder=999;
+    inner.userData.tpIdx=tpIdx;
+    const outer=new THREE.Mesh(_ringGeo,new THREE.MeshBasicMaterial({
+      color:col,wireframe:true,depthTest:false,transparent:true,opacity:0.45
+    }));
+    outer.scale.setScalar(SPHERE_R*1.7);
+    outer.position.set(x,y,z);
+    outer.renderOrder=998;
+    outer.userData.tpIdx=tpIdx;
+    scene.add(inner);scene.add(outer);
+    trackSpheres.push({inner,outer});
   });
-  const geo=new THREE.BufferGeometry();
-  geo.setAttribute('position',new THREE.BufferAttribute(posArr,3));
-  geo.setAttribute('color',new THREE.BufferAttribute(colArr,3));
-  trackCloud=new THREE.Points(geo,new THREE.PointsMaterial({size:14,vertexColors:true,sizeAttenuation:true,depthTest:false}));
-  scene.add(trackCloud);
 }
 
 function updateTrackPanel(){
@@ -598,17 +621,25 @@ function updateTrackPanel(){
   empty.style.display='none';
   trackedPoints.forEach((tp,i)=>{
     const valStr=meta?nodeStressStr(tp.idx,curFrame):'—';
+    const pid=meta?partArr[tp.idx]:'—';
+    const zone=meta?(partZoneMap[pid]||'未知'):'—';
+    const layer=meta?layerArr[tp.idx]:1;
+    const typeStr=layer===0?'Von Mises':'PEEQ';
     const item=document.createElement('div');item.className='track-item';
     item.innerHTML=`
       <div class="track-item-header">
         <div class="track-dot" style="background:${tp.color};color:${tp.color}"></div>
         <div class="track-label" title="${tp.label}">${tp.label}</div>
-        <span class="track-remove" data-i="${i}">✕</span>
       </div>
-      <div class="track-val" id="tval-${i}">${valStr}</div>
-      <button class="track-curve-btn" data-i="${i}">📈 查看应力曲线</button>`;
-    item.querySelector('.track-remove').addEventListener('click',()=>{
-      trackedPoints.splice(i,1);updateTrackPanel();updateTrackMarkers();
+      <div class="track-meta">Part ${pid} · ${zone}</div>
+      <div class="track-val" id="tval-${i}">${valStr} <span style="font-size:9px;opacity:.5">${typeStr}</span></div>
+      <div class="track-btns">
+        <button class="track-locate-btn${tp.hidden?' hidden-marker':''}" data-i="${i}">${tp.hidden?'● 隐藏中':'● 显示中'}</button>
+        <button class="track-curve-btn" data-i="${i}">📈 应力曲线</button>
+      </div>`;
+    item.querySelector('.track-locate-btn').addEventListener('click',()=>{
+      tp.hidden=!tp.hidden;
+      updateTrackMarkers();updateTrackPanel();
     });
     item.querySelector('.track-curve-btn').addEventListener('click',()=>showStressCurve(tp));
     view.appendChild(item);
@@ -619,7 +650,7 @@ function addTrackedPoint(idx){
   if(trackedPoints.some(tp=>tp.idx===idx))return;
   const color=TRACK_COLORS[trackedPoints.length%TRACK_COLORS.length];
   const pid=partArr[idx],zone=partZoneMap[pid]||'未知';
-  trackedPoints.push({idx,label:zone,color});
+  trackedPoints.push({idx,label:zone,color,hidden:false});
   updateTrackPanel();updateTrackMarkers();
   document.querySelector('.tab-btn[data-tab="track"]').click();
 }
@@ -851,61 +882,43 @@ document.getElementById('search-input').addEventListener('input',function(){buil
 document.getElementById('btn-check-all').addEventListener('click',()=>{hiddenParts.clear();syncCheckboxes();applyFrame(curFrame);});
 document.getElementById('btn-uncheck-all').addEventListener('click',()=>{PARTS_DATA.forEach(p=>hiddenParts.add(p.id));syncCheckboxes();applyFrame(curFrame);});
 
-// ---- 点击检测 ----
+// ---- 球体点击交互 ----
 const raycaster=new THREE.Raycaster();
 const mouse=new THREE.Vector2();
 const tooltip=document.getElementById('tooltip');
 let isDragging=false,mouseDownPos={x:0,y:0};
-renderer.domElement.addEventListener('mousedown',e=>{mouseDownPos={x:e.clientX,y:e.clientY};isDragging=false;tooltip.style.display='none';});
+renderer.domElement.addEventListener('mousedown',e=>{mouseDownPos={x:e.clientX,y:e.clientY};isDragging=false;});
 renderer.domElement.addEventListener('mousemove',e=>{const dx=e.clientX-mouseDownPos.x,dy=e.clientY-mouseDownPos.y;if(Math.sqrt(dx*dx+dy*dy)>4)isDragging=true;});
 renderer.domElement.addEventListener('click',e=>{
-  if(isDragging||!bodyCloud)return;
+  if(isDragging)return;
+  tooltip.style.display='none';
+  if(!trackSpheres.length)return;
   const rect=renderer.domElement.getBoundingClientRect();
   mouse.x=((e.clientX-rect.left)/rect.width)*2-1;
   mouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
   raycaster.setFromCamera(mouse,camera);
-  // 动态阈值：缩小时选点更精准
-  raycaster.params.Points.threshold=Math.max(3,orb.getR()*0.006);
-  const objs=[bodyCloud];if(trackCloud)objs.push(trackCloud);
-  const hits=raycaster.intersectObjects(objs);
-  if(!hits.length){tooltip.style.display='none';return;}
-  // 优先命中主点云
-  const hit=hits.find(h=>h.object===bodyCloud)||hits[0];
-  const idx=hit.index,val=valFrames[curFrame][idx],layer=layerArr[idx],pid=partArr[idx],pos=posFrames[curFrame];
-  lastClickedIdx=idx;
-  const zone=partZoneMap[pid]||'未知';
-  let valStr,typeStr;
-  if(layer===0){typeStr='护栏（Von Mises）';valStr=val<2?'0 MPa':`${((val-2)/253*meta.vm_p95).toFixed(2)} MPa`;}
-  else{typeStr='车身（PEEQ）';valStr=val<2?'0':`${((val-2)/253*meta.eps_p95).toFixed(5)}`;}
+  const meshes=trackSpheres.flatMap(s=>[s.inner,s.outer]);
+  const hits=raycaster.intersectObjects(meshes);
+  if(!hits.length)return;
+  const tpIdx=hits[0].object.userData.tpIdx;
+  const tp=trackedPoints[tpIdx];
+  if(!tp)return;
+  const pid=partArr[tp.idx],zone=partZoneMap[pid]||'未知',layer=layerArr[tp.idx];
+  const val=valFrames[curFrame][tp.idx];
+  const typeStr=layer===0?'护栏（Von Mises）':'车身（PEEQ）';
+  const valStr=val<2?(layer===0?'0 MPa':'0'):(layer===0?`${((val-2)/253*meta.vm_p95).toFixed(2)} MPa`:`${((val-2)/253*meta.eps_p95).toFixed(5)}`);
+  const pos=posFrames[curFrame];
+  document.getElementById('tt-label').textContent=tp.label;
+  document.getElementById('tt-label').style.color=tp.color;
   document.getElementById('tt-part').textContent=pid;
   document.getElementById('tt-zone').textContent=zone;
   document.getElementById('tt-type').textContent=typeStr;
   document.getElementById('tt-val').textContent=valStr;
-  document.getElementById('tt-pos').textContent=`${pos[idx*3].toFixed(0)}, ${pos[idx*3+1].toFixed(0)}, ${pos[idx*3+2].toFixed(0)}`;
-  const isTracked=trackedPoints.some(tp=>tp.idx===idx);
-  const trackBtn=document.getElementById('tt-track-btn');
-  trackBtn.classList.toggle('tracked',isTracked);
-  trackBtn.textContent=isTracked?'✓ 已跟踪':'📌 跟踪此点';
-  document.querySelectorAll('.part-item.highlighted').forEach(el=>el.classList.remove('highlighted'));
-  const itemEl=document.querySelector(`.part-item[data-pid="${pid}"]`);
-  if(itemEl){itemEl.classList.add('highlighted');itemEl.scrollIntoView({block:'nearest'});}
-  const tx=Math.min(e.clientX-rect.left+16,rect.width-200);
-  const ty=Math.min(e.clientY-rect.top-10,rect.height-160);
+  document.getElementById('tt-pos').textContent=`${pos[tp.idx*3].toFixed(0)}, ${pos[tp.idx*3+1].toFixed(0)}, ${pos[tp.idx*3+2].toFixed(0)}`;
+  document.getElementById('tt-curve-btn').onclick=()=>{tooltip.style.display='none';showStressCurve(tp);};
+  const tx=Math.min(e.clientX-rect.left+16,rect.width-205);
+  const ty=Math.min(e.clientY-rect.top-10,rect.height-175);
   tooltip.style.left=tx+'px';tooltip.style.top=ty+'px';tooltip.style.display='block';
-});
-document.getElementById('tt-track-btn').addEventListener('click',()=>{
-  if(lastClickedIdx<0)return;
-  const existing=trackedPoints.findIndex(tp=>tp.idx===lastClickedIdx);
-  if(existing>=0){
-    trackedPoints.splice(existing,1);
-    document.getElementById('tt-track-btn').classList.remove('tracked');
-    document.getElementById('tt-track-btn').textContent='📌 跟踪此点';
-    updateTrackPanel();updateTrackMarkers();
-  } else {
-    addTrackedPoint(lastClickedIdx);
-    document.getElementById('tt-track-btn').classList.add('tracked');
-    document.getElementById('tt-track-btn').textContent='✓ 已跟踪';
-  }
 });
 
 // 帧控制
@@ -938,6 +951,46 @@ async function load(){
     document.getElementById('cb-max').textContent=`${meta.eps_p95.toFixed(4)}/${meta.vm_p95.toFixed(0)}MPa`;
     document.getElementById('goto-input').max=meta.n_frames;
     prog.style.width='90%';txt.textContent='构建场景...';
+    // 预定义跟踪点：主驾驶座椅中部（臀部）和上部（头部）
+    {
+      const p0=posFrames[0];
+      function findClosestNode(tx,ty,tz,filterFn){
+        let best=-1,bestD=Infinity;
+        for(let i=0;i<meta.n_nodes;i++){
+          if(filterFn&&!filterFn(i))continue;
+          const dx=p0[i*3]-tx,dy=p0[i*3+1]-ty,dz=p0[i*3+2]-tz;
+          const d=dx*dx+dy*dy+dz*dz;
+          if(d<bestD){bestD=d;best=i;}
+        }
+        return best;
+      }
+      // 臀部：驾驶舱/中部/中（Part 2000306，cz≈643）
+      const midCenterPids=new Set(PARTS_DATA.filter(p=>p.zone==='驾驶舱/中部/中').map(p=>p.id));
+      const buttIdx=findClosestNode(-1962,15,643,i=>midCenterPids.has(partArr[i])&&layerArr[i]===1);
+      // 头部：驾驶舱/上部 中最靠近车辆中心的部件（Part 2000808/2000810，cz≈867，cy=±472）
+      const upperPids=new Set(PARTS_DATA.filter(p=>p.zone.startsWith('驾驶舱/上部')).map(p=>p.id));
+      const headIdx=findClosestNode(-2385,0,867,i=>upperPids.has(partArr[i])&&layerArr[i]===1);
+      // 碰撞点：扫描多帧，找车身上 PEEQ 峰值最高的节点
+      let impactIdx=-1,impactMaxVal=0;
+      const sampleFrames=[
+        Math.floor(meta.n_frames*0.4),
+        Math.floor(meta.n_frames*0.6),
+        Math.floor(meta.n_frames*0.8),
+        meta.n_frames-1
+      ];
+      for(let i=0;i<meta.n_nodes;i++){
+        if(layerArr[i]!==1)continue; // 只看车身
+        let nodeMax=0;
+        for(const fi of sampleFrames){
+          const v=valFrames[fi][i];
+          if(v>nodeMax)nodeMax=v;
+        }
+        if(nodeMax>impactMaxVal){impactMaxVal=nodeMax;impactIdx=i;}
+      }
+      if(buttIdx>=0)trackedPoints.push({idx:buttIdx,label:'座椅中部（臀部）',color:'#FFD700',hidden:false});
+      if(headIdx>=0)trackedPoints.push({idx:headIdx,label:'座椅上部（头部）',color:'#FF4455',hidden:false});
+      if(impactIdx>=0)trackedPoints.push({idx:impactIdx,label:'车身碰撞点（峰值应力）',color:'#00FFAA',hidden:false});
+    }
     buildBodyCloud(meta.n_nodes);buildTireMeshes();
     const p0=posFrames[0],step=Math.max(1,Math.floor(meta.n_nodes/2000));
     let cx=0,cy=0,cz=0,cnt=0,maxD=0;
@@ -948,6 +1001,9 @@ async function load(){
     document.getElementById('slider').max=meta.n_frames-1;
     buildPartList();
     applyFrame(0);
+    updateTrackPanel();updateTrackMarkers();
+    // 初始切到跟踪点 Tab
+    document.querySelector('.tab-btn[data-tab="track"]').click();
     prog.style.width='100%';
     setTimeout(()=>document.getElementById('loading').style.display='none',250);
   }catch(err){txt.textContent=`加载失败：${err.message}`;txt.style.color='#e53935';console.error(err);}
