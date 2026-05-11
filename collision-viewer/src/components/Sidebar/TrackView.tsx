@@ -1,12 +1,15 @@
 import { useStore } from '../../store/useStore';
 import type { TrackedPoint } from '../../store/useStore';
-import { nodeStressStr } from '../../lib/simData';
+import { nodeStressStr, getSimData } from '../../lib/simData';
+import { PARTS_DATA } from '../../lib/partsData';
+import InlineStressChart from '../Chart/InlineStressChart';
 
 interface Props {
   onShowCurve: (tp: TrackedPoint) => void;
+  onBuildInspect: (pids: number[]) => Promise<void>;
 }
 
-export default function TrackView({ onShowCurve }: Props) {
+export default function TrackView({ onShowCurve, onBuildInspect }: Props) {
   const { curFrame, trackedPoints, removeTrackedPoint, toggleTrackHidden } = useStore();
 
   if (!trackedPoints.length) {
@@ -25,14 +28,26 @@ export default function TrackView({ onShowCurve }: Props) {
     <div className="track-view">
       {trackedPoints.map((tp, i) => {
         const valStr = nodeStressStr(tp.idx, curFrame);
+        const data = getSimData();
+        const partId = data ? data.partArr[tp.idx] : null;
+        const partInfo = partId ? PARTS_DATA.find(p => p.id === partId) : null;
         return (
           <TrackItem
             key={i}
             tp={tp}
             valStr={valStr}
+            partId={partId}
+            partZone={partInfo?.zone ?? null}
+            curFrame={curFrame}
             onRemove={() => removeTrackedPoint(i)}
             onToggleHide={() => toggleTrackHidden(i)}
             onShowCurve={() => onShowCurve(tp)}
+            onInspectPart={partId ? () => {
+              useStore.setState({ activeTab: 'inspect' });
+              const cur = useStore.getState().inspectPartIds;
+              if (!cur.includes(partId)) useStore.getState().addInspectPart(partId);
+              onBuildInspect([...new Set([...cur, partId])]);
+            } : undefined}
           />
         );
       })}
@@ -43,20 +58,36 @@ export default function TrackView({ onShowCurve }: Props) {
 interface ItemProps {
   tp: TrackedPoint;
   valStr: string;
+  partId: number | null;
+  partZone: string | null;
+  curFrame: number;
   onRemove: () => void;
   onToggleHide: () => void;
   onShowCurve: () => void;
+  onInspectPart?: () => void;
 }
 
-function TrackItem({ tp, valStr, onRemove, onToggleHide, onShowCurve }: ItemProps) {
+function TrackItem({ tp, valStr, partId, partZone, curFrame, onRemove, onToggleHide, onShowCurve, onInspectPart }: ItemProps) {
   return (
     <div className="track-item">
       <div className="track-item-header">
-        <div className="track-dot" style={{ background: tp.color, color: tp.color }} />
+        <div className="track-dot" style={{ background: tp.color }} />
         <div className="track-label" title={tp.label}>{tp.label}</div>
         <span className="track-remove" onClick={onRemove}>✕</span>
       </div>
+      {partId && (
+        <div className="track-part-info">
+          <span className="track-part-id">Part {partId}</span>
+          {partZone && <span className="track-part-zone">{partZone}</span>}
+          {onInspectPart && (
+            <button className="track-inspect-btn" onClick={onInspectPart} title="在检查Tab高亮此部件">
+              检查
+            </button>
+          )}
+        </div>
+      )}
       <div className="track-val">{valStr}</div>
+      <InlineStressChart tp={tp} curFrame={curFrame} />
       <div className="track-btns">
         <button
           className={`track-locate-btn${tp.hidden ? ' hidden-marker' : ''}`}

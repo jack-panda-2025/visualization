@@ -1,29 +1,27 @@
 import { useStore } from '../../store/useStore';
-import type { TrackedPoint, ViewMode } from '../../store/useStore';
-import ZoneView from './ZoneView';
-import PartView from './PartView';
+import type { TrackedPoint } from '../../store/useStore';
 import TrackView from './TrackView';
 import MeshView from './MeshView';
+import InspectView from './InspectView';
 
 const TABS = [
-  { key: 'zone',  label: '区域' },
-  { key: 'part',  label: 'Part' },
-  { key: 'track', label: '跟踪' },
-  { key: 'mesh',  label: '部件/网格' },
+  { key: 'track',   label: '跟踪' },
+  { key: 'mesh',    label: '网格' },
+  { key: 'inspect', label: '检查' },
 ] as const;
 
 interface Props {
-  onFrameRefresh: () => void;
   onShowCurve: (tp: TrackedPoint) => void;
   onBuildMesh: () => Promise<void>;
-  onViewModeChange: (m: ViewMode) => void;
   onMeshOpacityChange: (v: number) => void;
   onMeshWireframeChange: (v: boolean) => void;
+  onBuildInspect: (pids: number[]) => Promise<void>;
 }
 
 export default function Sidebar({
-  onFrameRefresh, onShowCurve,
-  onBuildMesh, onViewModeChange, onMeshOpacityChange, onMeshWireframeChange,
+  onShowCurve,
+  onBuildMesh, onMeshOpacityChange, onMeshWireframeChange,
+  onBuildInspect,
 }: Props) {
   const { activeTab, setActiveTab } = useStore();
 
@@ -34,23 +32,21 @@ export default function Sidebar({
           <button
             key={key}
             className={`tab-btn${activeTab === key ? ' active' : ''}`}
-            onClick={() => setActiveTab(key)}
+            onClick={() => setActiveTab(key as typeof activeTab)}
           >
             {label}
           </button>
         ))}
       </div>
-      {activeTab === 'zone'  && <ZoneView onFrameRefresh={onFrameRefresh} />}
-      {activeTab === 'part'  && <PartView onFrameRefresh={onFrameRefresh} />}
-      {activeTab === 'track' && <TrackView onShowCurve={onShowCurve} />}
-      {activeTab === 'mesh'  && (
+      {activeTab === 'track'   && <TrackView onShowCurve={onShowCurve} onBuildInspect={onBuildInspect} />}
+      {activeTab === 'mesh'    && (
         <MeshView
           onBuildMesh={onBuildMesh}
-          onViewModeChange={onViewModeChange}
           onOpacityChange={onMeshOpacityChange}
           onWireframeChange={onMeshWireframeChange}
         />
       )}
+      {activeTab === 'inspect' && <InspectView onBuildInspect={onBuildInspect} />}
     </div>
   );
 }

@@ -20,6 +20,18 @@ export default function App() {
   const { loaded, setLoaded, curFrame, setFrame } = useStore();
   const sceneRef = useRef<SceneAPI | null>(null);
 
+  // Sync view mode with active tab
+  const activeTab = useStore(s => s.activeTab);
+  useEffect(() => {
+    if (!loaded || !sceneRef.current) return;
+    if (activeTab === 'mesh') {
+      if (useStore.getState().meshBuilt) sceneRef.current.setViewMode('mesh');
+      // if not built yet, MeshView's auto-build effect handles it
+    } else {
+      sceneRef.current.setViewMode('stress');
+    }
+  }, [activeTab, loaded]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -59,12 +71,8 @@ export default function App() {
           return best;
         }
 
-        const midCenterPids = new Set(PARTS_DATA.filter(p => p.zone === '驾驶舱/中部/中').map(p => p.id));
-        const buttIdx = findClosest(-1962, 15, 643, i =>
-          midCenterPids.has(simData.partArr[i]) && simData.layerArr[i] === 1);
-        const upperPids = new Set(PARTS_DATA.filter(p => p.zone.startsWith('驾驶舱/上部')).map(p => p.id));
-        const headIdx = findClosest(-2385, 0, 867, i =>
-          upperPids.has(simData.partArr[i]) && simData.layerArr[i] === 1);
+        const buttIdx = findClosest(-5203, 1007, 1729);
+        const headIdx = findClosest(-5332, 1200, 2934);
 
         const sampleFrames = [
           Math.floor(simData.meta.n_frames * 0.4),
@@ -101,11 +109,12 @@ export default function App() {
   const handleShowCurve = useCallback((tp: TrackedPoint) => setChartTarget(tp), []);
 
   const handleBuildMesh = useCallback(async () => {
+    sceneRef.current?.setViewMode('mesh');
     await sceneRef.current?.buildMeshView();
   }, []);
 
-  const handleViewModeChange = useCallback((m: ViewMode) => {
-    sceneRef.current?.setViewMode(m);
+  const handleBuildInspect = useCallback(async (pids: number[]) => {
+    await sceneRef.current?.buildInspectMesh(pids);
   }, []);
 
   const handleMeshOpacityChange = useCallback((v: number) => {
@@ -122,12 +131,11 @@ export default function App() {
       {loaded && (
         <>
           <Sidebar
-            onFrameRefresh={() => handleFrameChange(curFrame)}
             onShowCurve={handleShowCurve}
             onBuildMesh={handleBuildMesh}
-            onViewModeChange={handleViewModeChange}
             onMeshOpacityChange={handleMeshOpacityChange}
             onMeshWireframeChange={handleMeshWireframeChange}
+            onBuildInspect={handleBuildInspect}
           />
           <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
             <Viewer onShowCurve={handleShowCurve} sceneRef={sceneRef} />

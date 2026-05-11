@@ -11,6 +11,7 @@ import type { TrackedPoint, ViewMode } from '../store/useStore';
 
 const SPHERE_R = 45;
 const MAX_HULL_POINTS = 250; // max sample points per part for convex hull
+const MESH_MIN_NODES = 200;  // skip parts with fewer sampled nodes (avoids tiny overlapping hulls)
 
 export function useThreeScene(containerRef: React.RefObject<HTMLDivElement | null>) {
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -24,6 +25,9 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement | nul
   const tireAngleRef = useRef(0);
   const trackSpheresRef = useRef<{ inner: THREE.Mesh; outer: THREE.Mesh }[]>([]);
   const meshGroupRef = useRef<THREE.Group | null>(null);   // convex hull meshes
+  const inspectGroupRef = useRef<THREE.Group | null>(null); // inspect highlight meshes
+  // Per-part animation data: geo + which sim-node backs each vertex
+  const meshAnimPartsRef = useRef<{ geo: THREE.BufferGeometry; nodeIndices: Int32Array }[]>([]);
   const orbRef = useRef<OrbitalCamera | null>(null);
   const animFrameRef = useRef<number>(0);
 
@@ -41,6 +45,14 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement | nul
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    dirLight.position.set(1, 2, 1.5);
+    scene.add(dirLight);
+    const fillLight = new THREE.DirectionalLight(0x8899ff, 0.35);
+    fillLight.position.set(-1, -0.5, -1);
+    scene.add(fillLight);
 
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1e7);
     cameraRef.current = camera;
@@ -118,6 +130,11 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement | nul
     scene.add(meshGroup);
     meshGroupRef.current = meshGroup;
 
+    // Inspect highlight group (always visible)
+    const inspectGroup = new THREE.Group();
+    scene.add(inspectGroup);
+    inspectGroupRef.current = inspectGroup;
+
     // Camera fit
     const p0 = posFrames[0];
     const step = Math.max(1, Math.floor(meta.n_nodes / 2000));
@@ -176,9 +193,25 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement | nul
       const qSpin = new THREE.Quaternion().setFromAxisAngle(axis, tireAngleRef.current);
       mesh.quaternion.copy(qSpin.multiply(qAlign));
     }
+
+    // Animate mesh hulls: update vertex positions to match current frame
+    if (meshGroupRef.current?.visible) {
+      for (const { geo, nodeIndices } of meshAnimPartsRef.current) {
+        const posAttr = geo.attributes.position as THREE.BufferAttribute;
+        const arr = posAttr.array as Float32Array;
+        for (let vi = 0; vi < posAttr.count; vi++) {
+          const ni = nodeIndices[vi];
+          arr[vi * 3]     = pos[ni * 3];
+          arr[vi * 3 + 1] = pos[ni * 3 + 1];
+          arr[vi * 3 + 2] = pos[ni * 3 + 2];
+        }
+        posAttr.needsUpdate = true;
+        geo.computeVertexNormals();
+      }
+    }
   }, []);
 
-  // Build convex hull meshes for current frame
+  // Build convex hull meshes for current frame — one hull per part, opaque solid + wireframe
   const buildMeshView = useCallback((opacity: number, showWireframe: boolean): Promise<void> => {
     return new Promise(resolve => {
       const data = getSimData();
@@ -191,15 +224,15 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement | nul
       const pos = posFrames[fi];
       const hidden = useStore.getState().hiddenParts;
 
-      // Clear old mesh group
       while (meshGroup.children.length) {
         const child = meshGroup.children[0] as THREE.Mesh;
         child.geometry.dispose();
         (child.material as THREE.Material).dispose();
         meshGroup.remove(child);
       }
+      meshAnimPartsRef.current = [];
 
-      // Group node indices per part
+      // Group nodes per part
       const partNodes = new Map<number, number[]>();
       for (let i = 0; i < meta.n_nodes; i++) {
         const pid = partArr[i];
@@ -209,52 +242,60 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement | nul
         arr.push(i);
       }
 
-      // Build hulls in chunks to avoid blocking UI
-      const parts = PARTS_DATA.filter(p => partNodes.has(p.id));
+      const parts = PARTS_DATA.filter(p => (partNodes.get(p.id)?.length ?? 0) >= MESH_MIN_NODES);
       let idx = 0;
-      const CHUNK = 20;
+      const CHUNK = 15;
 
       const step = () => {
         const end = Math.min(idx + CHUNK, parts.length);
         for (let pi = idx; pi < end; pi++) {
           const part = parts[pi];
           const nodes = partNodes.get(part.id)!;
-          if (nodes.length < 4) continue;
 
-          // Reservoir sampling to get MAX_HULL_POINTS uniformly
-          const sampled: THREE.Vector3[] = [];
           const take = Math.min(nodes.length, MAX_HULL_POINTS);
-          if (nodes.length <= take) {
-            for (const ni of nodes) sampled.push(new THREE.Vector3(pos[ni * 3], pos[ni * 3 + 1], pos[ni * 3 + 2]));
-          } else {
-            // Systematic stride sampling (faster than reservoir for visual purposes)
-            const stride = Math.floor(nodes.length / take);
-            for (let k = 0; k < take; k++) {
-              const ni = nodes[k * stride];
-              sampled.push(new THREE.Vector3(pos[ni * 3], pos[ni * 3 + 1], pos[ni * 3 + 2]));
-            }
+          const sampled: THREE.Vector3[] = [];
+          const sampledNI: number[] = []; // parallel array: node index for each sampled point
+          const stride = Math.max(1, Math.floor(nodes.length / take));
+          for (let k = 0; k < nodes.length && sampled.length < take; k += stride) {
+            const ni = nodes[k];
+            sampled.push(new THREE.Vector3(pos[ni * 3], pos[ni * 3 + 1], pos[ni * 3 + 2]));
+            sampledNI.push(ni);
           }
           if (sampled.length < 4) continue;
 
           let geo: ConvexGeometry;
-          try { geo = new ConvexGeometry(sampled); }
-          catch { continue; }
+          try { geo = new ConvexGeometry(sampled); } catch { continue; }
+
+          // Map each hull vertex back to the closest sampled node index
+          const posAttr = geo.attributes.position as THREE.BufferAttribute;
+          const vertNI = new Int32Array(posAttr.count);
+          for (let vi = 0; vi < posAttr.count; vi++) {
+            const vx = posAttr.getX(vi), vy = posAttr.getY(vi), vz = posAttr.getZ(vi);
+            let bestK = 0, bestD = Infinity;
+            for (let k = 0; k < sampledNI.length; k++) {
+              const ni = sampledNI[k];
+              const dx = pos[ni * 3] - vx, dy = pos[ni * 3 + 1] - vy, dz = pos[ni * 3 + 2] - vz;
+              const d = dx * dx + dy * dy + dz * dz;
+              if (d < bestD) { bestD = d; bestK = k; }
+            }
+            vertNI[vi] = sampledNI[bestK];
+          }
+          meshAnimPartsRef.current.push({ geo, nodeIndices: vertNI });
 
           const col = partColorMap.get(part.id) ?? new THREE.Color(0x888888);
 
-          // Solid face mesh
-          const solidMat = new THREE.MeshBasicMaterial({
-            color: col, transparent: true, opacity, side: THREE.DoubleSide,
-            depthWrite: false,
+          // Solid — always opaque so depth test handles overlap correctly, no watercolor
+          const solidMat = new THREE.MeshPhongMaterial({
+            color: col, transparent: false, opacity: 1,
+            side: THREE.FrontSide, depthWrite: true, shininess: 35,
           });
-          const solidMesh = new THREE.Mesh(geo, solidMat);
-          solidMesh.userData.partId = part.id;
-          meshGroup.add(solidMesh);
+          meshGroup.add(new THREE.Mesh(geo, solidMat));
 
-          // Wireframe overlay
+          // Wireframe overlay at user-controlled opacity
           if (showWireframe) {
             const wireMat = new THREE.MeshBasicMaterial({
-              color: col, wireframe: true, transparent: true, opacity: Math.min(1, opacity + 0.4),
+              color: col, wireframe: true, transparent: true,
+              opacity: Math.min(1, opacity * 0.7 + 0.15),
             });
             meshGroup.add(new THREE.Mesh(geo, wireMat));
           }
@@ -275,18 +316,83 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement | nul
   const updateMeshOpacity = useCallback((opacity: number, showWireframe: boolean) => {
     const meshGroup = meshGroupRef.current;
     if (!meshGroup) return;
-    let solidIdx = 0;
     for (const child of meshGroup.children) {
-      const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial;
+      const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial | THREE.MeshPhongMaterial;
       if (mat.wireframe) {
-        mat.opacity = Math.min(1, opacity + 0.4);
+        mat.opacity = Math.min(1, opacity * 0.7 + 0.15);
         mat.visible = showWireframe;
-      } else {
-        mat.opacity = opacity;
-        solidIdx++;
       }
+      // solid meshes stay opaque — don't touch them; depth test handles overlap
       mat.needsUpdate = true;
     }
+  }, []);
+
+  const INSPECT_COLORS = ['#FF6B35', '#FFD700', '#00FFCC', '#FF44AA', '#44AAFF', '#AAFFAA'];
+
+  const buildInspectMesh = useCallback((pids: number[]): Promise<void> => {
+    return new Promise(resolve => {
+      const data = getSimData();
+      const scene = sceneRef.current;
+      const inspectGroup = inspectGroupRef.current;
+      if (!data || !scene || !inspectGroup) { resolve(); return; }
+
+      while (inspectGroup.children.length) {
+        const child = inspectGroup.children[0] as THREE.Mesh;
+        child.geometry.dispose();
+        (child.material as THREE.Material).dispose();
+        inspectGroup.remove(child);
+      }
+      if (!pids.length) { resolve(); return; }
+
+      const { meta, posFrames, partArr } = data;
+      const fi = useStore.getState().curFrame;
+      const pos = posFrames[fi];
+
+      const partNodes = new Map<number, number[]>();
+      for (let i = 0; i < meta.n_nodes; i++) {
+        const pid = partArr[i];
+        if (!pids.includes(pid)) continue;
+        let arr = partNodes.get(pid);
+        if (!arr) { arr = []; partNodes.set(pid, arr); }
+        arr.push(i);
+      }
+
+      let colorIdx = 0;
+      for (const pid of pids) {
+        const nodes = partNodes.get(pid);
+        if (!nodes || nodes.length < 4) { colorIdx++; continue; }
+        const col = new THREE.Color(INSPECT_COLORS[colorIdx % INSPECT_COLORS.length]);
+        colorIdx++;
+
+        const take = Math.min(nodes.length, MAX_HULL_POINTS);
+        const sampled: THREE.Vector3[] = [];
+        if (nodes.length <= take) {
+          for (const ni of nodes) sampled.push(new THREE.Vector3(pos[ni * 3], pos[ni * 3 + 1], pos[ni * 3 + 2]));
+        } else {
+          const stride = Math.floor(nodes.length / take);
+          for (let k = 0; k < take; k++) {
+            const ni = nodes[k * stride];
+            sampled.push(new THREE.Vector3(pos[ni * 3], pos[ni * 3 + 1], pos[ni * 3 + 2]));
+          }
+        }
+        if (sampled.length < 4) continue;
+
+        let geo: ConvexGeometry;
+        try { geo = new ConvexGeometry(sampled); } catch { continue; }
+
+        const solidMat = new THREE.MeshPhongMaterial({
+          color: col, transparent: true, opacity: 0.72,
+          side: THREE.FrontSide, depthWrite: true, shininess: 60,
+        });
+        inspectGroup.add(new THREE.Mesh(geo, solidMat));
+
+        const wireMat = new THREE.MeshBasicMaterial({
+          color: col, wireframe: true, transparent: true, opacity: 0.9,
+        });
+        inspectGroup.add(new THREE.Mesh(geo, wireMat));
+      }
+      resolve();
+    });
   }, []);
 
   const setViewMode = useCallback((mode: ViewMode) => {
@@ -359,11 +465,30 @@ export function useThreeScene(containerRef: React.RefObject<HTMLDivElement | nul
     return hits[0].object.userData.tpIdx as number;
   }, []);
 
+  const intersectPointCloud = useCallback((clientX: number, clientY: number): number | null => {
+    const renderer = rendererRef.current;
+    const camera = cameraRef.current;
+    const cloud = bodyCloudRef.current;
+    if (!renderer || !camera || !cloud) return null;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.params.Points = { threshold: 18 };
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObject(cloud);
+    if (!hits.length) return null;
+    return hits[0].index ?? null;
+  }, []);
+
   const getDomElement = useCallback(() => rendererRef.current?.domElement ?? null, []);
 
   return {
     buildScene, applyFrame, updateTrackSpheres, focusTarget,
-    intersectSpheres, getDomElement, buildMeshView, updateMeshOpacity, setViewMode,
+    intersectSpheres, intersectPointCloud, getDomElement, buildMeshView, updateMeshOpacity, setViewMode,
+    buildInspectMesh,
   };
 }
 

@@ -17,7 +17,7 @@ interface SimStore {
   hiddenParts: Set<number>;
   trackedPoints: TrackedPoint[];
   chartTarget: TrackedPoint | null;
-  activeTab: 'zone' | 'part' | 'track' | 'mesh';
+  activeTab: 'track' | 'mesh' | 'inspect';
   viewMode: ViewMode;
   meshOpacity: number;
   meshWireframe: boolean;
@@ -32,11 +32,14 @@ interface SimStore {
   removeTrackedPoint: (i: number) => void;
   toggleTrackHidden: (i: number) => void;
   setChartTarget: (tp: TrackedPoint | null) => void;
-  setActiveTab: (tab: 'zone' | 'part' | 'track' | 'mesh') => void;
+  setActiveTab: (tab: 'track' | 'mesh' | 'inspect') => void;
   setViewMode: (m: ViewMode) => void;
   setMeshOpacity: (v: number) => void;
   setMeshWireframe: (v: boolean) => void;
   setMeshBuilt: (v: boolean) => void;
+  inspectPartIds: number[];
+  addInspectPart: (pid: number) => void;
+  removeInspectPart: (pid: number) => void;
 }
 
 export const useStore = create<SimStore>((set, get) => ({
@@ -46,11 +49,12 @@ export const useStore = create<SimStore>((set, get) => ({
   hiddenParts: new Set(),
   trackedPoints: [],
   chartTarget: null,
-  activeTab: 'zone',
+  activeTab: 'track',
   viewMode: 'stress',
-  meshOpacity: 0.35,
+  meshOpacity: 0.75,
   meshWireframe: true,
   meshBuilt: false,
+  inspectPartIds: [],
 
   setLoaded: (v) => set({ loaded: v }),
   setFrame: (fi) => set({ curFrame: fi }),
@@ -89,4 +93,10 @@ export const useStore = create<SimStore>((set, get) => ({
   setMeshOpacity: (v) => set({ meshOpacity: v }),
   setMeshWireframe: (v) => set({ meshWireframe: v }),
   setMeshBuilt: (v) => set({ meshBuilt: v }),
+  addInspectPart: (pid) => {
+    const { inspectPartIds } = get();
+    if (inspectPartIds.includes(pid)) return;
+    set({ inspectPartIds: [...inspectPartIds, pid] });
+  },
+  removeInspectPart: (pid) => set({ inspectPartIds: get().inspectPartIds.filter(p => p !== pid) }),
 }));

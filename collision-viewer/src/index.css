@@ -273,3 +273,114 @@ body { background: #0a0a14; color: #ccc; font-family: -apple-system, sans-serif;
 
 /* Sidebar tab font — tighter for 4 tabs */
 .sidebar-tabs .tab-btn { font-size: 10px; }
+
+/* Part Inspect Panel */
+.inspect-panel { padding: 6px 10px 10px; }
+.inspect-input-row { display: flex; gap: 6px; margin: 6px 0 2px; }
+.inspect-input {
+  flex: 1; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px; color: #fff; font-size: 11px; padding: 5px 8px; outline: none;
+}
+.inspect-input:focus { border-color: rgba(55,138,221,0.6); }
+.inspect-add-btn {
+  width: 28px; height: 28px; border-radius: 6px; border: 1px solid rgba(55,138,221,0.4);
+  background: rgba(55,138,221,0.15); color: #fff; font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.inspect-add-btn:hover:not(:disabled) { background: rgba(55,138,221,0.3); }
+.inspect-add-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.inspect-error { font-size: 10px; color: #ff6060; padding: 2px 2px 4px; }
+.inspect-tags { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.inspect-tag {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.05); border: 1px solid; border-radius: 6px;
+  padding: 4px 8px; font-size: 10px;
+}
+.inspect-tag-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.inspect-tag-id { color: rgba(255,255,255,0.8); font-variant-numeric: tabular-nums; min-width: 62px; }
+.inspect-tag-zone { color: rgba(255,255,255,0.35); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inspect-tag-rm {
+  background: none; border: none; color: rgba(255,255,255,0.35); cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 0 0 0 4px; flex-shrink: 0;
+}
+.inspect-tag-rm:hover { color: #ff6060; }
+
+/* Inspect View */
+.inspect-view { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 6px 0 0; }
+.inspect-global-bar {
+  display: flex; align-items: center; gap: 5px; padding: 4px 8px 6px;
+}
+.inspect-global-btn {
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.65); border-radius: 4px; font-size: 10px;
+  padding: 2px 8px; cursor: pointer;
+}
+.inspect-global-btn:hover:not(:disabled) { background: rgba(255,255,255,0.14); color: #fff; }
+.inspect-global-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.inspect-count { font-size: 10px; color: rgba(255,200,80,0.8); margin-left: auto; }
+.inspect-list {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; padding: 2px 4px 4px;
+}
+.inspect-list::-webkit-scrollbar { width: 3px; }
+.inspect-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+/* Group */
+.inspect-group { margin-bottom: 4px; }
+.inspect-group-header {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 6px; background: rgba(255,255,255,0.04); border-radius: 5px;
+  user-select: none;
+}
+.inspect-group-toggle {
+  background: none; border: none; color: rgba(255,255,255,0.4);
+  font-size: 8px; cursor: pointer; padding: 0 2px; line-height: 1;
+}
+.inspect-group-name { font-size: 11px; color: rgba(255,255,255,0.7); font-weight: 500; flex: 1; }
+.inspect-group-count { font-size: 9px; color: rgba(255,255,255,0.3); font-variant-numeric: tabular-nums; }
+.inspect-group-sel-btn {
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.5); border-radius: 3px; font-size: 9px;
+  padding: 1px 6px; cursor: pointer; flex-shrink: 0;
+}
+.inspect-group-sel-btn:hover:not(:disabled) { background: rgba(255,255,255,0.14); color: #fff; }
+.inspect-group-sel-btn.active { border-color: rgba(255,100,80,0.5); color: rgba(255,120,100,0.9); }
+.inspect-group-sel-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+/* Row */
+.inspect-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 6px 3px 14px; border-radius: 4px; cursor: pointer;
+  border-left: 2px solid transparent; transition: background 0.1s;
+  user-select: none;
+}
+.inspect-row:hover { background: rgba(255,255,255,0.07); }
+.inspect-row.selected { background: rgba(255,255,255,0.06); padding-left: 6px; }
+.inspect-row-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.inspect-row-id { font-size: 10px; color: rgba(255,255,255,0.65); min-width: 66px; font-variant-numeric: tabular-nums; }
+.inspect-row-zone { font-size: 10px; color: rgba(255,255,255,0.35); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inspect-row-count { font-size: 9px; color: rgba(255,255,255,0.2); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+/* Track item part info */
+.track-part-info {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 0 2px; font-size: 10px;
+}
+.track-part-id { color: rgba(255,255,255,0.45); font-variant-numeric: tabular-nums; }
+.track-part-zone { color: rgba(255,255,255,0.25); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track-inspect-btn {
+  background: rgba(55,138,221,0.18); border: 1px solid rgba(55,138,221,0.35);
+  color: rgba(100,180,255,0.8); border-radius: 4px; font-size: 9px;
+  padding: 1px 6px; cursor: pointer; flex-shrink: 0;
+}
+.track-inspect-btn:hover { background: rgba(55,138,221,0.32); color: #fff; }
+
+/* Inline stress chart */
+.inline-chart-wrap {
+  margin: 4px 8px 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.inline-chart-canvas {
+  display: block;
+  width: 100%;
+  height: 110px;
+}

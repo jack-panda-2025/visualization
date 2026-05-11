@@ -2,9 +2,14 @@
 import type { SimData } from './parseBin';
 
 let _data: SimData | null = null;
+let _availablePartIds: Set<number> | null = null;
 
-export function setSimData(d: SimData) { _data = d; }
+export function setSimData(d: SimData) {
+  _data = d;
+  _availablePartIds = new Set(d.partArr);
+}
 export function getSimData(): SimData | null { return _data; }
+export function getAvailablePartIds(): Set<number> { return _availablePartIds ?? new Set(); }
 
 export function nodeStressValue(idx: number, fi: number): number {
   if (!_data) return 0;

@@ -18,14 +18,15 @@ export interface SceneAPI {
   buildMeshView: () => Promise<void>;
   setViewMode: (m: ViewMode) => void;
   updateMeshOpacity: (v: number, wf: boolean) => void;
+  buildInspectMesh: (pids: number[]) => Promise<void>;
 }
 
 export default function Viewer({ onShowCurve, sceneRef }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const {
     buildScene, applyFrame, updateTrackSpheres,
-    focusTarget, intersectSpheres, getDomElement,
-    buildMeshView, updateMeshOpacity, setViewMode,
+    focusTarget, intersectSpheres, intersectPointCloud, getDomElement,
+    buildMeshView, updateMeshOpacity, setViewMode, buildInspectMesh,
   } = useThreeScene(containerRef);
 
   const curFrame = useStore(s => s.curFrame);
@@ -42,6 +43,7 @@ export default function Viewer({ onShowCurve, sceneRef }: Props) {
       buildMeshView: () => buildMeshView(meshOpacity, meshWireframe),
       setViewMode,
       updateMeshOpacity: (v, wf) => updateMeshOpacity(v, wf),
+      buildInspectMesh,
     };
   }, [buildMeshView, setViewMode, updateMeshOpacity, meshOpacity, meshWireframe, sceneRef]);
 
@@ -89,17 +91,25 @@ export default function Viewer({ onShowCurve, sceneRef }: Props) {
   const handleClick = useCallback((e: React.MouseEvent) => {
     if (isDraggingRef.current) return;
     setTooltip(null);
-    const tpIdx = intersectSpheres(e.clientX, e.clientY);
-    if (tpIdx === null) return;
-    const tp = useStore.getState().trackedPoints[tpIdx];
-    if (!tp) return;
     const dom = getDomElement();
     if (!dom) return;
     const rect = dom.getBoundingClientRect();
-    const x = Math.min(e.clientX - rect.left + 16, rect.width - 210);
-    const y = Math.min(e.clientY - rect.top - 10, rect.height - 200);
-    setTooltip({ nodeIdx: tp.idx, x, y });
-  }, [intersectSpheres, getDomElement]);
+    const tx = Math.min(e.clientX - rect.left + 16, rect.width - 210);
+    const ty = Math.min(e.clientY - rect.top - 10, rect.height - 220);
+
+    // 先检查是否点中了跟踪球
+    const tpIdx = intersectSpheres(e.clientX, e.clientY);
+    if (tpIdx !== null) {
+      const tp = useStore.getState().trackedPoints[tpIdx];
+      if (tp) { setTooltip({ nodeIdx: tp.idx, x: tx, y: ty }); return; }
+    }
+
+    // 再检查点云节点
+    const nodeIdx = intersectPointCloud(e.clientX, e.clientY);
+    if (nodeIdx !== null) {
+      setTooltip({ nodeIdx, x: tx, y: ty });
+    }
+  }, [intersectSpheres, intersectPointCloud, getDomElement]);
 
   const handleAddTrack = useCallback(() => {
     if (!tooltip) return;
