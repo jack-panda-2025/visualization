@@ -1,7 +1,8 @@
 # Data files (large binary/simulation data)
 data/
 *.bin
-*.json
+collision_light.json
+parts_info.json
 
 # Python
 __pycache__/
