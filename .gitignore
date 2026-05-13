@@ -16,3 +16,4 @@ __pycache__/
 # Large output files
 vtp_output_v3/
 *.ply
+.claude/
