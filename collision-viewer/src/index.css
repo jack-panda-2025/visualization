@@ -384,3 +384,32 @@ body { background: #0a0a14; color: #ccc; font-family: -apple-system, sans-serif;
   width: 100%;
   height: 110px;
 }
+
+/* ── Simulation Selector ─────────────────────────────────────────────────── */
+.sim-selector-overlay {
+  position: fixed; inset: 0; background: rgba(8,8,18,0.96);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.sim-selector-card {
+  background: rgba(20,22,40,0.98); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px; padding: 28px 24px; width: 440px; max-width: 92vw;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+}
+.sim-selector-title {
+  font-size: 16px; font-weight: 600; color: rgba(255,255,255,0.9);
+  margin-bottom: 16px; letter-spacing: 0.02em;
+}
+.sim-selector-hint { font-size: 13px; color: rgba(255,255,255,0.35); padding: 8px 0; }
+.sim-selector-error { font-size: 12px; color: #ff6060; padding: 6px 0; }
+.sim-list { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; }
+.sim-list::-webkit-scrollbar { width: 3px; }
+.sim-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+.sim-row {
+  display: flex; flex-direction: column; gap: 3px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px; padding: 10px 14px; cursor: pointer; text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sim-row:hover { background: rgba(55,138,221,0.15); border-color: rgba(55,138,221,0.4); }
+.sim-row-name { font-size: 13px; color: rgba(255,255,255,0.85); font-weight: 500; }
+.sim-row-meta { font-size: 11px; color: rgba(255,255,255,0.3); }
