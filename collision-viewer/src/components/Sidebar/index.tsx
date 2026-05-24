@@ -5,9 +5,9 @@ import MeshView from './MeshView';
 import InspectView from './InspectView';
 
 const TABS = [
-  { key: 'track',   label: '跟踪' },
-  { key: 'mesh',    label: '网格' },
-  { key: 'inspect', label: '检查' },
+  { key: 'track',   label: 'Track' },
+  { key: 'mesh',    label: 'Mesh' },
+  { key: 'inspect', label: 'Inspect' },
 ] as const;
 
 interface Props {

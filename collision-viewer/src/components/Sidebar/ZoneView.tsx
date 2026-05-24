@@ -3,12 +3,12 @@ import { PARTS_DATA } from '../../lib/partsData';
 import { PRESETS, ZONE_LABELS } from '../../lib/constants';
 import type { PresetKey } from '../../lib/constants';
 
-const ZONES = ['驾驶舱', '前舱', '后舱', '车尾', '护栏', '全部'];
+const ZONES = ['Cabin', 'Front', 'Rear', 'Trunk', 'Barrier', 'All'];
 const ZLAYERS = [
-  { label: '顶部', sub: 'Z>1200', min: 1200, max: Infinity },
-  { label: '上部', sub: '800~1200', min: 800, max: 1200 },
-  { label: '中部', sub: '400~800', min: 400, max: 800 },
-  { label: '底部', sub: 'Z<400', min: -Infinity, max: 400 },
+  { label: 'Top', sub: 'Z>1200', min: 1200, max: Infinity },
+  { label: 'Upper', sub: '800~1200', min: 800, max: 1200 },
+  { label: 'Mid', sub: '400~800', min: 400, max: 800 },
+  { label: 'Bottom', sub: 'Z<400', min: -Infinity, max: 400 },
 ];
 
 interface Props { onFrameRefresh: () => void; }
@@ -18,7 +18,7 @@ export default function ZoneView({ onFrameRefresh }: Props) {
 
   const applyZone = (zone: string) => {
     const next = new Set<number>();
-    if (zone !== '全部') PARTS_DATA.forEach(p => { if (!p.zone.startsWith(zone)) next.add(p.id); });
+    if (zone !== 'All') PARTS_DATA.forEach(p => { if (!p.zone.startsWith(zone)) next.add(p.id); });
     setHiddenParts(next);
     onFrameRefresh();
   };
@@ -39,7 +39,7 @@ export default function ZoneView({ onFrameRefresh }: Props) {
 
   return (
     <div className="zone-view">
-      <div className="section-title">快速定位</div>
+      <div className="section-title">Quick Focus</div>
       <div className="zone-btn-grid">
         {ZONES.map(z => (
           <button key={z} className="zone-btn" onClick={() => applyZone(z)}>
@@ -50,7 +50,7 @@ export default function ZoneView({ onFrameRefresh }: Props) {
       </div>
 
       <div className="divider" />
-      <div className="section-title">预设组合</div>
+      <div className="section-title">Preset Combinations</div>
       <div className="zone-presets">
         {presetKeys.map(key => (
           <button key={key} className="preset-btn" onClick={() => applyPreset(key)}>
@@ -61,16 +61,16 @@ export default function ZoneView({ onFrameRefresh }: Props) {
       </div>
 
       <div className="divider" />
-      <div className="section-title">相机定位</div>
+      <div className="section-title">Camera Focus</div>
       <div className="zone-presets">
         <button className="preset-btn" onClick={() => document.dispatchEvent(new CustomEvent('focus-driver'))}>
           <span className="pb-dot" style={{ background: '#FFD700' }} />
-          主驾驶座椅（选点用）
+          Driver Seat (for node selection)
         </button>
       </div>
 
       <div className="divider" />
-      <div className="section-title">Z 轴高度筛选</div>
+      <div className="section-title">Z-Axis Height Filter</div>
       <div className="zone-btn-grid">
         {ZLAYERS.map(z => (
           <button key={z.label} className="zone-btn" onClick={() => applyZLayer(z.min, z.max)}>

@@ -31,13 +31,13 @@ export default function SimSelector({ onSelect }: Props) {
   return (
     <div className="sim-selector-overlay">
       <div className="sim-selector-card">
-        <div className="sim-selector-title">选择仿真文件</div>
+        <div className="sim-selector-title">Select Simulation File</div>
 
-        {loading && <div className="sim-selector-hint">加载列表中…</div>}
+        {loading && <div className="sim-selector-hint">Loading list…</div>}
         {error   && <div className="sim-selector-error">{error}</div>}
 
         {!loading && !error && sims.length === 0 && (
-          <div className="sim-selector-hint">暂无可用仿真文件</div>
+          <div className="sim-selector-hint">No simulation files available</div>
         )}
 
         <div className="sim-list">

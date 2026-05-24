@@ -43,7 +43,7 @@ export default function MeshView({ onBuildMesh, onOpacityChange, onWireframeChan
         disabled={building}
         style={{ marginTop: 12 }}
       >
-        {building ? '构建中…' : meshBuilt ? '重建网格' : '构建网格'}
+        {building ? 'Building…' : meshBuilt ? 'Rebuild Mesh' : 'Build Mesh'}
       </button>
 
       {meshBuilt && (
@@ -51,7 +51,7 @@ export default function MeshView({ onBuildMesh, onOpacityChange, onWireframeChan
           <div className="divider" style={{ margin: '10px 0' }} />
 
           <div className="mesh-ctrl-row">
-            <span className="mesh-ctrl-label">透明度</span>
+            <span className="mesh-ctrl-label">Opacity</span>
             <input
               type="range" min={0.05} max={1} step={0.05}
               value={meshOpacity}
@@ -65,7 +65,7 @@ export default function MeshView({ onBuildMesh, onOpacityChange, onWireframeChan
             <label className="mesh-check-label">
               <input type="checkbox" checked={meshWireframe}
                 onChange={e => handleWireframe(e.target.checked)} />
-              显示线框
+              Show Wireframe
             </label>
           </div>
         </>
@@ -73,7 +73,7 @@ export default function MeshView({ onBuildMesh, onOpacityChange, onWireframeChan
 
       {!meshBuilt && (
         <div className="mesh-hint" style={{ marginTop: 8 }}>
-          构建后，所有部件渲染为凸包面网格，并随动画实时更新。
+          After building, all parts are rendered as convex hull meshes and updated in real time with the animation.
         </div>
       )}
     </div>

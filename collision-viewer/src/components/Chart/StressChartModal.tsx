@@ -24,7 +24,7 @@ export default function StressChartModal({ target, curFrame, onClose }: Props) {
     <div className="chart-modal-backdrop" onClick={onClose}>
       <div className="chart-box" onClick={e => e.stopPropagation()}>
         <div className="chart-title-bar">
-          <span className="chart-title-text">应力/应变曲线 — {target.label}</span>
+          <span className="chart-title-text">Stress/Strain Curve — {target.label}</span>
           <span className="chart-close" onClick={onClose}>✕</span>
         </div>
         <canvas ref={canvasRef} className="chart-canvas" height={240} />
@@ -99,7 +99,7 @@ function drawCurve(canvas: HTMLCanvasElement, tp: TrackedPoint, curFrame: number
   ctx.restore();
   ctx.fillStyle = 'rgba(255,255,255,0.38)';
   ctx.font = '9px -apple-system,sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('帧', pad.l + pw / 2, h - 2);
+  ctx.fillText('Frame', pad.l + pw / 2, h - 2);
 
   // Area fill
   ctx.beginPath();
@@ -137,7 +137,7 @@ function drawCurve(canvas: HTMLCanvasElement, tp: TrackedPoint, curFrame: number
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
   ctx.font = '9px -apple-system,sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(
-    `帧${curFrame + 1}: ${isVM ? vals[curFrame].toFixed(2) + 'MPa' : vals[curFrame].toFixed(5)}`,
+    `Frame${curFrame + 1}: ${isVM ? vals[curFrame].toFixed(2) + 'MPa' : vals[curFrame].toFixed(5)}`,
     cfx, labelY,
   );
 }

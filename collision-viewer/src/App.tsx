@@ -14,7 +14,7 @@ import type { SceneAPI } from './components/Viewer';
 import Controls from './components/Controls';
 import StressChartModal from './components/Chart/StressChartModal';
 
-// 有后端时走选择界面，否则直接读本地文件
+// Use backend selection UI if available, otherwise load local file directly
 const USE_BACKEND = !!import.meta.env.VITE_API_BASE_URL;
 
 export default function App() {
@@ -42,7 +42,7 @@ export default function App() {
   const loadSimulation = useCallback(async (dataUrl: string) => {
     setPhase('loading');
     try {
-      setLoadState({ text: '下载数据...', progress: 10 });
+      setLoadState({ text: 'Downloading data...', progress: 10 });
       const resp = await fetch(dataUrl);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const total = parseInt(resp.headers.get('content-length') ?? '0');
@@ -54,17 +54,17 @@ export default function App() {
         if (done) break;
         chunks.push(value);
         received += value.length;
-        if (total) setLoadState({ text: '下载数据...', progress: 10 + 65 * received / total });
+        if (total) setLoadState({ text: 'Downloading data...', progress: 10 + 65 * received / total });
       }
 
-      setLoadState({ text: '解析数据...', progress: 78 });
+      setLoadState({ text: 'Parsing data...', progress: 78 });
       const merged = new Uint8Array(received);
       let o = 0;
       for (const c of chunks) { merged.set(c, o); o += c.length; }
       const simData = parseBin(merged.buffer);
       setSimData(simData);
 
-      setLoadState({ text: '构建场景...', progress: 90 });
+      setLoadState({ text: 'Building scene...', progress: 90 });
 
       const p0 = simData.posFrames[0];
       function findClosest(tx: number, ty: number, tz: number, filterFn?: (i: number) => boolean) {
@@ -99,19 +99,19 @@ export default function App() {
       }
 
       const initialPoints: TrackedPoint[] = [];
-      if (buttIdx >= 0) initialPoints.push({ idx: buttIdx, label: '座椅中部（臀部）', color: '#FFD700', hidden: false });
-      if (headIdx >= 0) initialPoints.push({ idx: headIdx, label: '座椅上部（头部）', color: '#FF4455', hidden: false });
-      if (impactIdx >= 0) initialPoints.push({ idx: impactIdx, label: '车身碰撞点（峰值应力）', color: '#00FFAA', hidden: false });
+      if (buttIdx >= 0) initialPoints.push({ idx: buttIdx, label: 'Seat Mid (Hip)', color: '#FFD700', hidden: false });
+      if (headIdx >= 0) initialPoints.push({ idx: headIdx, label: 'Seat Upper (Head)', color: '#FF4455', hidden: false });
+      if (impactIdx >= 0) initialPoints.push({ idx: impactIdx, label: 'Impact Point (Peak Stress)', color: '#00FFAA', hidden: false });
 
       useStore.setState({ trackedPoints: initialPoints, activeTab: 'track', meshBuilt: false });
-      setLoadState({ text: '完成', progress: 100 });
+      setLoadState({ text: 'Done', progress: 100 });
       setTimeout(() => { setLoaded(true); setPhase('ready'); }, 250);
     } catch (err) {
-      setLoadState({ text: '', progress: 0, error: `加载失败：${(err as Error).message}` });
+      setLoadState({ text: '', progress: 0, error: `Failed to load: ${(err as Error).message}` });
     }
   }, [setLoaded]);
 
-  // 无后端时直接加载本地文件
+  // Load local file directly when no backend is available
   useEffect(() => {
     if (!USE_BACKEND) loadSimulation(DATA_URL);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -119,11 +119,11 @@ export default function App() {
   const handleSelectSim = useCallback(async (sim: SimulationItem) => {
     try {
       setPhase('loading');
-      setLoadState({ text: '获取下载链接...', progress: 5 });
+      setLoadState({ text: 'Fetching download link...', progress: 5 });
       const url = await fetchSignedUrl(sim.id);
       await loadSimulation(url);
     } catch (err) {
-      setLoadState({ text: '', progress: 0, error: `获取链接失败：${(err as Error).message}` });
+      setLoadState({ text: '', progress: 0, error: `Failed to fetch link: ${(err as Error).message}` });
     }
   }, [loadSimulation]);
 

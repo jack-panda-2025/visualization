@@ -39,7 +39,7 @@ export default function Controls({ onFrameChange }: Props) {
         <button className="ctrl-btn" onClick={() => jump(curFrame - 1)}>‹</button>
         <button className="ctrl-btn" onClick={() => jump(curFrame + 1)}>›</button>
         <div className="goto-wrap">
-          <span className="goto-label">跳至</span>
+          <span className="goto-label">Go to</span>
           <input
             className="goto-input"
             type="number"
@@ -49,7 +49,7 @@ export default function Controls({ onFrameChange }: Props) {
             onChange={e => setGotoVal(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleGoto(); }}
           />
-          <span className="goto-label">帧</span>
+          <span className="goto-label">Frame</span>
           <button className="ctrl-btn go-btn" onClick={handleGoto}>GO</button>
         </div>
         <input
@@ -65,14 +65,14 @@ export default function Controls({ onFrameChange }: Props) {
       <div className="info-row">
         <div className="stat">
           <span className="stat-val">{nFrames}</span>
-          <span>总帧数</span>
+          <span>Total Frames</span>
         </div>
         <div className="stat">
           <span className="stat-val">{curFrame + 1} / {nFrames}</span>
-          <span>当前帧</span>
+          <span>Current Frame</span>
         </div>
         <div className="colorbar-wrap">
-          <div className="colorbar-title">PEEQ / Von Mises（蓝=低，红=高）</div>
+          <div className="colorbar-title">PEEQ / Von Mises (blue=low, red=high)</div>
           <div className="colorbar-row">
             <span className="cb-label">0</span>
             <div className="colorbar-gradient" />

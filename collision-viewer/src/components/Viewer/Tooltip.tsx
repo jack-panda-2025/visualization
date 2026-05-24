@@ -18,9 +18,9 @@ export default function Tooltip({ nodeIdx, x, y, curFrame, trackedPoints, onAddT
   if (!data) return null;
 
   const pid = data.partArr[nodeIdx];
-  const zone = partZoneMap[pid] ?? '未知';
+  const zone = partZoneMap[pid] ?? 'Unknown';
   const layer = data.layerArr[nodeIdx];
-  const typeStr = layer === 0 ? '护栏（Von Mises）' : '车身（PEEQ）';
+  const typeStr = layer === 0 ? 'Barrier (Von Mises)' : 'Body (PEEQ)';
   const valStr = nodeStressStr(nodeIdx, curFrame);
   const pos = data.posFrames[curFrame];
   const posStr = `${pos[nodeIdx * 3].toFixed(0)}, ${pos[nodeIdx * 3 + 1].toFixed(0)}, ${pos[nodeIdx * 3 + 2].toFixed(0)}`;
@@ -44,16 +44,16 @@ export default function Tooltip({ nodeIdx, x, y, curFrame, trackedPoints, onAddT
       <div className="tt-close" onClick={onClose}>✕</div>
       <div className="tt-title">{zone}</div>
       <div className="tt-row"><span className="tt-key">Part ID</span><span className="tt-val">{pid}</span></div>
-      <div className="tt-row"><span className="tt-key">区域</span><span className="tt-val">{zone}</span></div>
-      <div className="tt-row"><span className="tt-key">类型</span><span className="tt-val">{typeStr}</span></div>
-      <div className="tt-row"><span className="tt-key">应力/应变</span><span className="tt-val">{valStr}</span></div>
-      <div className="tt-row"><span className="tt-key">位置</span><span className="tt-val">{posStr}</span></div>
+      <div className="tt-row"><span className="tt-key">Zone</span><span className="tt-val">{zone}</span></div>
+      <div className="tt-row"><span className="tt-key">Type</span><span className="tt-val">{typeStr}</span></div>
+      <div className="tt-row"><span className="tt-key">Stress/Strain</span><span className="tt-val">{valStr}</span></div>
+      <div className="tt-row"><span className="tt-key">Position</span><span className="tt-val">{posStr}</span></div>
       <button className="tt-curve-btn" onClick={() => { onClose(); onShowCurve(tempTp); }}>
-        📈 应力曲线
+        📈 Stress Curve
       </button>
       {!existingTp && (
         <button className="tt-track-btn" onClick={() => { onAddTrack(); onClose(); }}>
-          📌 跟踪此点
+          📌 Track this node
         </button>
       )}
     </div>

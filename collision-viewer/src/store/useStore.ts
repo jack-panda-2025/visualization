@@ -71,7 +71,7 @@ export const useStore = create<SimStore>((set, get) => ({
     const { trackedPoints } = get();
     if (trackedPoints.some(tp => tp.idx === idx)) return;
     const color = TRACK_COLORS[trackedPoints.length % TRACK_COLORS.length];
-    const newTp: TrackedPoint = { idx, label: '节点', color, hidden: false };
+    const newTp: TrackedPoint = { idx, label: 'Node', color, hidden: false };
     set({ trackedPoints: [...trackedPoints, newTp], activeTab: 'track' });
   },
 

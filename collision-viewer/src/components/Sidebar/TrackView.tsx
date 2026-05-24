@@ -16,9 +16,9 @@ export default function TrackView({ onShowCurve, onBuildInspect }: Props) {
     return (
       <div className="track-view">
         <div className="track-empty">
-          点击 3D 视图中的节点<br />
-          再点击「📌 跟踪此点」<br />
-          即可添加跟踪
+          Click a node in the 3D view<br />
+          then click "📌 Track this node"<br />
+          to add a tracking point
         </div>
       </div>
     );
@@ -80,8 +80,8 @@ function TrackItem({ tp, valStr, partId, partZone, curFrame, onRemove, onToggleH
           <span className="track-part-id">Part {partId}</span>
           {partZone && <span className="track-part-zone">{partZone}</span>}
           {onInspectPart && (
-            <button className="track-inspect-btn" onClick={onInspectPart} title="在检查Tab高亮此部件">
-              检查
+            <button className="track-inspect-btn" onClick={onInspectPart} title="Highlight this part in the Inspect tab">
+              Inspect
             </button>
           )}
         </div>
@@ -93,10 +93,10 @@ function TrackItem({ tp, valStr, partId, partZone, curFrame, onRemove, onToggleH
           className={`track-locate-btn${tp.hidden ? ' hidden-marker' : ''}`}
           onClick={onToggleHide}
         >
-          {tp.hidden ? '● 隐藏中' : '● 显示中'}
+          {tp.hidden ? '● Hidden' : '● Visible'}
         </button>
         <button className="track-curve-btn" onClick={onShowCurve}>
-          📈 应力曲线
+          📈 Stress Curve
         </button>
       </div>
     </div>

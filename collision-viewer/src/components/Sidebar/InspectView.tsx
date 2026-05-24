@@ -76,17 +76,17 @@ export default function InspectView({ onBuildInspect }: Props) {
     <div className="inspect-view">
       <input
         className="search-input"
-        placeholder="搜索 Part ID 或区域…"
+        placeholder="Search Part ID or Zone…"
         value={filter}
         onChange={e => setFilter(e.target.value)}
       />
 
       <div className="inspect-global-bar">
-        <button className="inspect-global-btn" onClick={selectAll} disabled={building}>全选</button>
-        <button className="inspect-global-btn" onClick={clearAll} disabled={building}>清空</button>
+        <button className="inspect-global-btn" onClick={selectAll} disabled={building}>Select All</button>
+        <button className="inspect-global-btn" onClick={clearAll} disabled={building}>Clear</button>
         <span className="inspect-count">
-          {inspectPartIds.length > 0 ? `已选 ${inspectPartIds.length}` : ''}
-          {building ? ' · 渲染中…' : ''}
+          {inspectPartIds.length > 0 ? `Selected ${inspectPartIds.length}` : ''}
+          {building ? ' · Rendering…' : ''}
         </span>
       </div>
 
@@ -114,7 +114,7 @@ export default function InspectView({ onBuildInspect }: Props) {
                   onClick={() => toggleGroup(pids)}
                   disabled={building}
                 >
-                  {allSelected ? '取消' : '全选'}
+                  {allSelected ? 'Deselect' : 'Select All'}
                 </button>
               </div>
 

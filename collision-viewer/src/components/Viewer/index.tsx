@@ -97,14 +97,14 @@ export default function Viewer({ onShowCurve, sceneRef }: Props) {
     const tx = Math.min(e.clientX - rect.left + 16, rect.width - 210);
     const ty = Math.min(e.clientY - rect.top - 10, rect.height - 220);
 
-    // 先检查是否点中了跟踪球
+    // First check if a tracking sphere was clicked
     const tpIdx = intersectSpheres(e.clientX, e.clientY);
     if (tpIdx !== null) {
       const tp = useStore.getState().trackedPoints[tpIdx];
       if (tp) { setTooltip({ nodeIdx: tp.idx, x: tx, y: ty }); return; }
     }
 
-    // 再检查点云节点
+    // Then check point cloud nodes
     const nodeIdx = intersectPointCloud(e.clientX, e.clientY);
     if (nodeIdx !== null) {
       setTooltip({ nodeIdx, x: tx, y: ty });
@@ -120,7 +120,7 @@ export default function Viewer({ onShowCurve, sceneRef }: Props) {
     if (pts.some(tp => tp.idx === nodeIdx)) return;
     const color = TRACK_COLORS[pts.length % TRACK_COLORS.length];
     const pid = data.partArr[nodeIdx];
-    const zone = partZoneMap[pid] ?? '未知';
+    const zone = partZoneMap[pid] ?? 'Unknown';
     useStore.setState(s => ({
       trackedPoints: [...s.trackedPoints, { idx: nodeIdx, label: zone, color, hidden: false }],
       activeTab: 'track',
@@ -129,7 +129,7 @@ export default function Viewer({ onShowCurve, sceneRef }: Props) {
   }, [tooltip, curFrame, updateTrackSpheres]);
 
   const viewMode = useStore(s => s.viewMode);
-  const viewLabel = viewMode === 'stress' ? 'PEEQ / Von Mises' : viewMode === 'partColor' ? '部件颜色' : '网格视图';
+  const viewLabel = viewMode === 'stress' ? 'PEEQ / Von Mises' : viewMode === 'partColor' ? 'Part Color' : 'Mesh View';
 
   return (
     <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
@@ -153,8 +153,8 @@ export default function Viewer({ onShowCurve, sceneRef }: Props) {
         />
       )}
       <div className="top-bar">
-        <div className="viewer-title">碰撞仿真 — {viewLabel}</div>
-        <div className="viewer-hint">左键旋转 · 右键平移 · 滚轮缩放</div>
+        <div className="viewer-title">Collision Simulation — {viewLabel}</div>
+        <div className="viewer-hint">Left-click rotate · Right-click pan · Scroll to zoom</div>
       </div>
     </div>
   );

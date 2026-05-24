@@ -16,71 +16,71 @@ export interface Preset {
 
 export const PRESETS: Record<PresetKey, Preset> = {
   all: {
-    label: '显示全部',
+    label: 'Show All',
     color: '#378ADD',
     buildHidden: () => new Set(),
   },
   cabin_interior: {
-    label: '仅驾驶舱内部',
+    label: 'Cabin Interior Only',
     color: '#4CAF50',
     buildHidden: () => {
       const s = new Set<number>();
-      PARTS_DATA.forEach(p => { if (!p.zone.startsWith('驾驶舱')) s.add(p.id); });
+      PARTS_DATA.forEach(p => { if (!p.zone.startsWith('Cabin')) s.add(p.id); });
       return s;
     },
   },
   no_roof: {
-    label: '隐藏顶棚',
+    label: 'Hide Roof',
     color: '#FF9800',
     buildHidden: () => {
       const s = new Set<number>();
-      PARTS_DATA.forEach(p => { if (p.zone.includes('顶部')) s.add(p.id); });
+      PARTS_DATA.forEach(p => { if (p.zone.includes('Top')) s.add(p.id); });
       return s;
     },
   },
   no_doors: {
-    label: '隐藏车门侧板',
+    label: 'Hide Door Panels',
     color: '#9C27B0',
     buildHidden: () => {
       const s = new Set<number>();
-      PARTS_DATA.forEach(p => { if (p.zone.includes('上部/左') || p.zone.includes('上部/右')) s.add(p.id); });
+      PARTS_DATA.forEach(p => { if (p.zone.includes('Upper/Left') || p.zone.includes('Upper/Right')) s.add(p.id); });
       return s;
     },
   },
   structure_only: {
-    label: '仅主要结构',
+    label: 'Main Structure Only',
     color: '#F44336',
     buildHidden: () => {
       const s = new Set<number>();
       PARTS_DATA.forEach(p => {
-        if (p.zone.includes('顶部') || p.zone.includes('上部/左') || p.zone.includes('上部/右')) s.add(p.id);
+        if (p.zone.includes('Top') || p.zone.includes('Upper/Left') || p.zone.includes('Upper/Right')) s.add(p.id);
       });
       return s;
     },
   },
   barrier_only: {
-    label: '仅护栏',
+    label: 'Barrier Only',
     color: '#607D8B',
     buildHidden: () => {
       const s = new Set<number>();
-      PARTS_DATA.forEach(p => { if (p.zone !== '护栏') s.add(p.id); });
+      PARTS_DATA.forEach(p => { if (p.zone !== 'Barrier') s.add(p.id); });
       return s;
     },
   },
 };
 
 export const ZONE_LABELS: Record<string, string> = {
-  '驾驶舱': '🚗',
-  '前舱': '⚙️',
-  '后舱': '🪑',
-  '车尾': '📦',
-  '护栏': '🚧',
-  '全部': '🌐',
+  'Cabin': '🚗',
+  'Front': '⚙️',
+  'Rear': '🪑',
+  'Trunk': '📦',
+  'Barrier': '🚧',
+  'All': '🌐',
 };
 
 export const ZLAYER_RANGES: Record<string, { min: number; max: number }> = {
-  '顶部': { min: 1200, max: Infinity },
-  '上部': { min: 800, max: 1200 },
-  '中部': { min: 400, max: 800 },
-  '底部': { min: -Infinity, max: 400 },
+  'Top': { min: 1200, max: Infinity },
+  'Upper': { min: 800, max: 1200 },
+  'Mid': { min: 400, max: 800 },
+  'Bottom': { min: -Infinity, max: 400 },
 };

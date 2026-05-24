@@ -3,7 +3,7 @@ import { useStore } from '../../store/useStore';
 import { PARTS_DATA } from '../../lib/partsData';
 import type { PartInfo } from '../../lib/partsData';
 
-const ZONE_ORDER = ['驾驶舱', '前舱', '后舱', '车尾', '车头', '护栏'];
+const ZONE_ORDER = ['Cabin', 'Front', 'Rear', 'Trunk', 'Hood', 'Barrier'];
 
 interface Props { onFrameRefresh: () => void; }
 
@@ -11,7 +11,7 @@ export default function PartView({ onFrameRefresh }: Props) {
   const [filter, setFilter] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     const m: Record<string, boolean> = {};
-    PARTS_DATA.forEach(p => { if (p.zone !== '驾驶舱') m[p.zone] = true; });
+    PARTS_DATA.forEach(p => { if (p.zone !== 'Cabin') m[p.zone] = true; });
     return m;
   });
   const { hiddenParts, togglePart, setHiddenParts } = useStore();
@@ -42,13 +42,13 @@ export default function PartView({ onFrameRefresh }: Props) {
       <div className="part-header">
         <input
           className="search-input"
-          placeholder="搜索 part ID 或区域..."
+          placeholder="Search part ID or zone..."
           value={filter}
           onChange={e => setFilter(e.target.value)}
         />
         <div className="part-actions">
-          <button className="sb-btn" onClick={showAll}>全部显示</button>
-          <button className="sb-btn" onClick={hideAll}>全部隐藏</button>
+          <button className="sb-btn" onClick={showAll}>Show All</button>
+          <button className="sb-btn" onClick={hideAll}>Hide All</button>
         </div>
       </div>
       <div className="part-list">
