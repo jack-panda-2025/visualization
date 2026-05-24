@@ -27,7 +27,10 @@ def _client():
 def list_simulations() -> list[dict]:
     """
     列出桶内所有 .bin 仿真文件，返回元数据列表。
+    未配置存储时返回空列表。
     """
+    if not settings.S3_BUCKET or not settings.S3_ACCESS_KEY:
+        return []
     client = _client()
     prefix = settings.S3_PREFIX
     paginator = client.get_paginator("list_objects_v2")
