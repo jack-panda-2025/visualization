@@ -5,6 +5,7 @@ import { parseBin } from './lib/parseBin';
 import { setSimData } from './lib/simData';
 import { fetchSignedUrl } from './lib/api';
 import type { SimulationItem } from './lib/api';
+import { DATA_URL } from './lib/constants';
 import Loading from './components/Loading';
 import SimSelector from './components/SimSelector';
 import Sidebar from './components/Sidebar';
@@ -13,8 +14,13 @@ import type { SceneAPI } from './components/Viewer';
 import Controls from './components/Controls';
 import StressChartModal from './components/Chart/StressChartModal';
 
+// 有后端时走选择界面，否则直接读本地文件
+const USE_BACKEND = !!import.meta.env.VITE_API_BASE_URL;
+
 export default function App() {
-  const [phase, setPhase] = useState<'select' | 'loading' | 'ready'>('select');
+  const [phase, setPhase] = useState<'select' | 'loading' | 'ready'>(
+    USE_BACKEND ? 'select' : 'loading'
+  );
   const [loadState, setLoadState] = useState<{ text: string; progress: number; error?: string }>({
     text: '', progress: 0,
   });
@@ -104,6 +110,11 @@ export default function App() {
       setLoadState({ text: '', progress: 0, error: `加载失败：${(err as Error).message}` });
     }
   }, [setLoaded]);
+
+  // 无后端时直接加载本地文件
+  useEffect(() => {
+    if (!USE_BACKEND) loadSimulation(DATA_URL);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectSim = useCallback(async (sim: SimulationItem) => {
     try {
