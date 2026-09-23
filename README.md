@@ -13,6 +13,34 @@ There are two things in here:
 
 ---
 
+## Screenshots
+
+**Field mode** — each panel shows its own quantity. Plastic strain on the truth
+side, position error on the prediction side: different units, different scales,
+and deliberately different colour ramps, because the two are not comparable.
+
+![Field mode](docs/images/01-surface-field.png)
+
+**Error mode** — both panels coloured by |prediction − truth| on one shared
+scale. The vehicle glows; the barrier stays dark. Most of the error is the car
+drifting as a whole, not the deformation being wrong.
+
+![Error mode](docs/images/02-surface-error.png)
+
+**Assembly mode** — coloured by functional assembly rather than by a measured
+quantity. Useful for orientation, and the drift is visible directly: the two
+bodies sit differently against the same barrier.
+
+![Assembly mode](docs/images/03-surface-assembly.png)
+
+**Point view** — the sampled nodes themselves, 100,046 of them. Point size
+follows each region's measured node spacing, so the finely-sampled impact zone
+does not smear into a solid while the coarse rear scatters into confetti.
+
+![Point view](docs/images/04-points.png)
+
+---
+
 ## Pages
 
 | URL | What it shows |
