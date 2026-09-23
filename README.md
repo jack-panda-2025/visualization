@@ -15,29 +15,36 @@ There are two things in here:
 
 ## Screenshots
 
-**Field mode** — each panel shows its own quantity. Plastic strain on the truth
-side, position error on the prediction side: different units, different scales,
-and deliberately different colour ramps, because the two are not comparable.
+**Surface view** — FEM ground truth on the left, the surrogate model's
+prediction on the right, one shared camera, one shared timeline.
 
-![Field mode](docs/images/01-surface-field.png)
+![Surface view](docs/images/01-surface-field.png)
 
-**Error mode** — both panels coloured by |prediction − truth| on one shared
-scale. The vehicle glows; the barrier stays dark. Most of the error is the car
-drifting as a whole, not the deformation being wrong.
-
-![Error mode](docs/images/02-surface-error.png)
-
-**Assembly mode** — coloured by functional assembly rather than by a measured
-quantity. Useful for orientation, and the drift is visible directly: the two
-bodies sit differently against the same barrier.
-
-![Assembly mode](docs/images/03-surface-assembly.png)
-
-**Point view** — the sampled nodes themselves, 100,046 of them. Point size
-follows each region's measured node spacing, so the finely-sampled impact zone
-does not smear into a solid while the coarse rear scatters into confetti.
+**Point view** — the same data as the sampled nodes themselves.
 
 ![Point view](docs/images/04-points.png)
+
+### Why the surface looks soft
+
+Both views are built from the **same 100,046 nodes**, and that is the whole
+limitation. The raw LS-DYNA case has 1,777,011 nodes and 1,616,462 elements;
+what reaches the viewer is a region-aware sample about 6% that size, chosen to
+train the surrogate model rather than to be looked at.
+
+Worse, the sample keeps almost none of the mesh *structure*. An element is only
+retained when every one of its corners survives sampling, which leaves 7,223
+usable shell elements out of the original 768,288 — under 1%. So there is no
+mesh to draw.
+
+The surface above is therefore not a mesh. Each node is splatted as a shaded
+sphere and the depth buffer is blurred until neighbouring splats fuse into a
+skin. That handles deformation for free and hides the uneven sampling, but it
+rounds off every crease and panel edge, which is why the car reads as clay.
+
+Rendering the real mesh means going back to the raw d3plot, where the
+connectivity still exists. That is a separate piece of work: 1.6 M elements
+across ~200 frames is far more than a browser can animate, so it needs surface
+extraction and decimation first.
 
 ---
 
