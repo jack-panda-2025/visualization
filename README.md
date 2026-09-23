@@ -1,33 +1,93 @@
 # Collision Simulation Viewer
 
-基于 React + Three.js 的车辆碰撞仿真可视化工具（v3.0）。
+Browser-based 3D visualisation for vehicle crash simulations, built with
+React + Three.js.
 
-## 数据文件
+There are two things in here:
 
-> **重要：仓库不含仿真数据（文件过大），需手动放置。**
+- a **single-simulation viewer** — the original tool, for exploring one
+  LS-DYNA run node by node;
+- a **truth-vs-prediction comparison view** — two panels side by side, FEM
+  ground truth against a surrogate model's prediction, on the same node set
+  and the same frames.
 
-| 文件 | 放置路径 | 说明 |
-|------|----------|------|
-| `collision_light.bin` | `collision-viewer/public/collision_light.bin` | 主数据文件，约 151 MB，二进制格式 |
+---
 
-原始 LS-DYNA 仿真结果（`d3plot*`）及中间产物（`collision_light.json`）存放在本地 `data/` 目录，不纳入版本控制。
+## Pages
 
-### 数据文件从哪里来
+| URL | What it shows |
+|-----|---------------|
+| `/` | Single simulation. Track / Mesh / Inspect tabs. |
+| `/?surface=<case>` | Comparison, rendered as a shaded surface. |
+| `/?points=<case>` | Comparison, rendered as the raw sampled point cloud. |
 
-`collision_light.bin` 由 `extract_data.py` 从原始 d3plot 文件生成：
+`<case>` is a case id from `collision-viewer/public/cases.json`, e.g.
+`model_100km`.
+
+---
+
+## Data files
+
+> **The repository contains no simulation data — the files are far too large.
+> Place them manually.**
+
+### Single-simulation viewer
+
+| File | Path | Size |
+|------|------|------|
+| `collision_light.bin` | `collision-viewer/public/` | ~151 MB |
+
+Produced from the raw d3plot files by `extract_data.py`:
 
 ```bash
-# 在项目根目录执行
 python extract_data.py
-```
-
-生成后将输出文件复制到 `collision-viewer/public/`：
-
-```bash
 cp collision_light.bin collision-viewer/public/
 ```
 
-## 开发启动
+### Comparison view
+
+Each case needs three files in `collision-viewer/public/`:
+
+| File | Contents |
+|------|----------|
+| `<case>_gt.bin` | FEM ground truth, coloured by plastic strain |
+| `<case>_pred.bin` | Model prediction, coloured by position error |
+| `<case>_meta.json` | Node/frame counts, field scales, region spacing, part table |
+
+These come from the surrogate-model repository, not this one — its
+`tools/h5_to_col2.py` converts a trajectory h5 plus a rollout result into the
+pair above. Both `.bin` files and the generated `_meta.json` are gitignored.
+
+### The case manifest
+
+`collision-viewer/public/cases.json` lists which condition combinations exist.
+The condition dropdowns are built from it — nothing is hardcoded in the
+front-end — so a new simulation only needs an entry appended:
+
+```json
+{ "id": "t_lok_60", "status": "ready", "validated": true,
+  "speed_kmh": 60, "angle_deg": -25.4, "barrier": "t_lok",
+  "checkpoint": "wj09_r3" }
+```
+
+`status` is deliberately three-valued, because each state implies a different
+next action:
+
+| status | Meaning | Shown as |
+|--------|---------|----------|
+| `ready` | The `.bin` files are present | selectable |
+| `pending` | The LS-DYNA run exists, but the viewer data has not been generated | disabled, "simulated, viewer data pending" |
+| *absent* | No simulation for this combination | disabled, "not yet simulated" |
+
+An option that appears to work but silently returns another condition's result
+is worse than one that explains itself, so unavailable values stay visible with
+their reason.
+
+---
+
+## Quick start
+
+### Front-end only
 
 ```bash
 cd collision-viewer
@@ -35,51 +95,125 @@ npm install
 npm run dev
 ```
 
-浏览器访问 `http://localhost:5173`，应用启动后自动从 `public/collision_light.bin` 加载数据。
+Then open one of:
 
-## 功能
+- <http://localhost:5173> — single simulation
+- <http://localhost:5173/?surface=model_100km> — comparison
 
-### 跟踪 Tab
-- 3D 点云显示碰撞过程，节点按 PEEQ / Von Mises 应力着色
-- 点击节点 → 弹出信息框，可添加跟踪点
-- 每个跟踪点显示实时应力值 + 帧历史曲线
+### With the FastAPI backend (optional)
 
-### 网格 Tab
-- 切换后自动将各部件渲染为凸包面网格
-- 网格随动画实时更新（顶点位置逐帧同步）
-- 支持透明度调节和线框叠加显示
+The backend serves simulation files from an S3-compatible bucket through
+time-limited signed URLs. Only the single-simulation viewer uses it.
 
-### 检查 Tab
-- 所有部件按区域分组（驾驶舱 / 前舱 / 后舱 / 车头 / 车尾 / 护栏）
-- 支持分组全选 / 取消，以及全局全选 / 清空
-- 选中部件渲染为彩色高亮凸包面
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env                # then fill in the credentials below
+uvicorn main:app --reload --port 8000
+```
 
-## 技术栈
+API at <http://localhost:8000>, interactive docs at `/docs`.
 
-- React 18 + TypeScript + Vite
-- Three.js（点云、ConvexGeometry、轨道相机）
-- Zustand（状态管理）
-- Canvas 2D API（内联应力曲线图）
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `S3_ENDPOINT_URL` | `""` | Blank for AWS S3; set for OSS/MinIO |
+| `S3_ACCESS_KEY` | `""` | Access key ID |
+| `S3_SECRET_KEY` | `""` | Secret access key |
+| `S3_REGION` | `us-east-1` | Ignored by OSS |
+| `S3_BUCKET` | `""` | Bucket holding the `.bin` files |
+| `S3_PREFIX` | `""` | Key prefix, e.g. `simulations/` |
+| `SIGNED_URL_EXPIRES` | `3600` | Signed URL lifetime, seconds |
+| `CORS_ORIGINS` | `localhost:5173,5174` | Allowed front-end origins |
 
-## 目录结构
+With `S3_BUCKET` or `S3_ACCESS_KEY` empty the simulation list returns empty and
+the backend still starts cleanly.
+
+To enable backend mode, create `collision-viewer/.env.local`:
 
 ```
-collision-viewer/
-  public/              ← 放置 collision_light.bin
-  src/
-    components/
-      Sidebar/         ← TrackView / MeshView / InspectView
-      Chart/           ← 内联曲线图 & 弹窗曲线图
-      Viewer/          ← Three.js 画布 & Tooltip
-      Controls/        ← 播放控制条
-    hooks/
-      useThreeScene.ts ← Three.js 核心逻辑
-      usePlayback.ts   ← 帧播放循环
-    lib/
-      parseBin.ts      ← 二进制数据解析
-      simData.ts       ← 仿真数据单例
-      partsData.ts     ← 864 个部件元数据
-      partColors.ts    ← 部件颜色映射
-    store/
-      useStore.ts      ← Zustand 全局状态
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+---
+
+## Comparison view
+
+**One shared camera.** Both panels are driven by the same orbit state, and it
+tracks the ground-truth vehicle as it travels. A comparison seen from two
+different angles is worse than none; and with each panel following its own car,
+the model's drift would be invisible. Here it shows up as the prediction
+sliding off centre.
+
+**Colouring modes**
+
+| Mode | What it does |
+|------|--------------|
+| Field | Each panel's own quantity — plastic strain on one side, position error on the other. Different units, different scales, and deliberately different colour ramps. Not comparable. |
+| Error | Both panels coloured by \|prediction − truth\| in mm on one shared scale. This is the like-for-like view. |
+| Assembly | Coloured by functional assembly — hood, doors, barrier. |
+| Region | Coloured by the sampler's six regions. |
+
+The colour ramp is switchable. **Spectrum** has the most contrast on screen;
+**Cividis** is colour-blind safe and survives greyscale printing, so use it for
+anything published.
+
+**Two render paths**
+
+*Surface* draws a shaded skin, and is the one to show people. It never
+reconstructs geometry: each node is splatted as a shaded sphere, the depth
+buffer is blurred bilaterally so splats fuse across a surface but not across
+silhouettes, and normals come from the smoothed depth. Deformation is therefore
+free — every frame is rebuilt from the positions currently in the buffer — and
+uneven sampling density is absorbed by the blur instead of having to be fixed
+in the data.
+
+*Points* draws the sampled nodes directly. Point size follows each region's
+measured node spacing, so no region smears into a solid while another scatters
+into confetti. The `grain` slider thins the finely-sampled regions toward a
+common spacing; it trades collision-zone detail for an even texture, and at the
+far end `veh_contact` keeps one node in 31.
+
+---
+
+## Tech stack
+
+React 19 · TypeScript · Vite · Three.js · Zustand · FastAPI + boto3 (optional
+backend).
+
+---
+
+## Project structure
+
+```
+visualization/
+├── collision-viewer/              # React + TypeScript front-end
+│   ├── public/
+│   │   ├── cases.json             # case manifest — drives the condition dropdowns
+│   │   └── *.bin, *_meta.json     # simulation data (gitignored)
+│   └── src/
+│       ├── components/
+│       │   ├── SurfaceView/       # comparison, shaded surface
+│       │   ├── PointsView/        # comparison, point cloud
+│       │   ├── CaseSelector.tsx   # condition dropdowns
+│       │   ├── Sidebar/           # single-sim tabs: Track / Mesh / Inspect
+│       │   ├── Chart/             # sparkline and modal stress-history charts
+│       │   ├── Viewer/            # single-sim Three.js canvas
+│       │   └── Controls/          # single-sim playback bar
+│       ├── hooks/
+│       │   ├── useThreeScene.ts   # single-sim scene
+│       │   └── usePlayback.ts     # rAF playback loop
+│       ├── lib/
+│       │   ├── surfacePass.ts     # screen-space surface rendering
+│       │   ├── compareData.ts     # COL2 pair loader
+│       │   ├── cases.ts           # case manifest types and lookup
+│       │   ├── partGroups.ts      # 704 parts → 20 functional assemblies
+│       │   ├── colors.ts          # Spectrum / Cividis / error ramps
+│       │   ├── parseBin.ts        # single-sim COL2 parser
+│       │   └── api.ts             # backend REST client
+│       └── store/useStore.ts      # Zustand state (single-sim)
+├── backend/                       # FastAPI: simulation list + signed URLs
+├── extract_data.py                # d3plot → COL2, for the single-sim viewer
+└── README.md
 ```

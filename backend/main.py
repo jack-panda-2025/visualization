@@ -33,7 +33,7 @@ class SignedUrlResponse(BaseModel):
 
 @app.get("/api/simulations", response_model=list[SimulationItem])
 def list_sims():
-    """列出所有可用仿真文件。"""
+    """List all available simulation files."""
     try:
         return list_simulations()
     except Exception as e:
@@ -42,7 +42,7 @@ def list_sims():
 
 @app.get("/api/simulations/{sim_id}/signed-url", response_model=SignedUrlResponse)
 def signed_url(sim_id: str):
-    """获取指定仿真文件的临时下载链接（有效期由 SIGNED_URL_EXPIRES 控制）。"""
+    """Return a time-limited pre-signed download URL for the specified simulation file."""
     try:
         url = get_signed_url(sim_id)
     except Exception as e:

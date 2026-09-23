@@ -26,8 +26,8 @@ def _client():
 
 def list_simulations() -> list[dict]:
     """
-    列出桶内所有 .bin 仿真文件，返回元数据列表。
-    未配置存储时返回空列表。
+    List all .bin simulation files in the configured S3 bucket.
+    Returns an empty list if storage credentials are not configured.
     """
     if not settings.S3_BUCKET or not settings.S3_ACCESS_KEY:
         return []
@@ -41,7 +41,7 @@ def list_simulations() -> list[dict]:
             key: str = obj["Key"]
             if not key.endswith(".bin"):
                 continue
-            name = key[len(prefix):]          # 去掉前缀，只留文件名
+            name = key[len(prefix):]          # Strip the key prefix, keep filename only
             sim_id = name.removesuffix(".bin")
             results.append({
                 "id": sim_id,
@@ -57,12 +57,12 @@ def list_simulations() -> list[dict]:
 
 def get_signed_url(sim_id: str) -> Optional[str]:
     """
-    生成指定仿真文件的临时签名下载 URL。
+    Generate a pre-signed download URL for the specified simulation file.
     """
     client = _client()
     key = settings.S3_PREFIX + sim_id + ".bin"
 
-    # 验证文件存在
+    # Verify the file exists before generating a URL
     try:
         client.head_object(Bucket=settings.S3_BUCKET, Key=key)
     except ClientError as e:

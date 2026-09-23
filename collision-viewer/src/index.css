@@ -413,3 +413,287 @@ body { background: #0a0a14; color: #ccc; font-family: -apple-system, sans-serif;
 .sim-row:hover { background: rgba(55,138,221,0.15); border-color: rgba(55,138,221,0.4); }
 .sim-row-name { font-size: 13px; color: rgba(255,255,255,0.85); font-weight: 500; }
 .sim-row-meta { font-size: 11px; color: rgba(255,255,255,0.3); }
+
+/* ---- Compare view (truth vs prediction) ---- */
+/* Product styling for the comparison pages. Light chrome around a dark
+   viewport — the combination CAD and FE post-processors use, because a shaded
+   body reads as a solid object against dark and the controls stay legible in
+   a lit room. Depth comes from layered hairlines and soft shadows rather than
+   from boxes-inside-boxes, so the 3D stays the loudest thing on screen. */
+.cmp-root {
+  --surface:      #ffffff;
+  --surface-2:    #f7f8fa;   /* chrome */
+  --surface-3:    #13161b;   /* 3D viewport ground */
+  --sunken:       #eef1f5;   /* slider tracks, inset wells */
+
+  --line:         rgba(15, 23, 42, 0.07);
+  --line-2:       rgba(15, 23, 42, 0.13);
+
+  --ink:          #0f141a;
+  --ink-2:        #47525f;
+  --ink-3:        #6d7887;
+
+  --accent:       #1257a6;
+  --accent-hi:    #1c6cc4;   /* top of the gradient on raised accent surfaces */
+  --accent-weak:  #eaf1fa;
+  --accent-line:  rgba(18, 87, 166, 0.35);
+
+  --notice-ink:   #7a4a00;
+  --notice-bg:    #fef6e7;
+  --notice-line:  rgba(180, 120, 20, 0.28);
+
+  --r:            6px;
+  --r-sm:         4px;
+  --sh-1:         0 1px 2px rgba(15, 23, 42, 0.06);
+  --sh-2:         0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 10px rgba(15, 23, 42, 0.07);
+  --ease:         160ms cubic-bezier(0.32, 0.72, 0, 1);
+
+  display: flex; flex-direction: column; width: 100%; height: 100vh;
+  background: var(--surface-2); color: var(--ink);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv05" 1, "ss03" 1;   /* single-storey l, flat-top a */
+}
+
+/* ---- Top bar ---- */
+.cmp-bar {
+  display: flex; align-items: center; gap: 14px; padding: 11px 18px; flex-shrink: 0;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  box-shadow: var(--sh-1); z-index: 2;
+}
+.cmp-title {
+  font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink);
+}
+.cmp-dim {
+  font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.002em;
+  font-variant-numeric: tabular-nums;
+}
+.cmp-spacer { flex: 1; }
+
+/* ---- Buttons ---- */
+.cmp-btn {
+  padding: 6px 12px; font: 500 12px/1.2 inherit; cursor: pointer;
+  border: 1px solid var(--line-2); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink-2);
+  box-shadow: var(--sh-1); transition: all var(--ease);
+}
+.cmp-btn:hover { color: var(--ink); border-color: rgba(15,23,42,0.22); box-shadow: var(--sh-2); }
+.cmp-btn:active { box-shadow: none; transform: translateY(0.5px); }
+.cmp-btn.on {
+  background: var(--accent-weak); border-color: var(--accent-line);
+  color: var(--accent); box-shadow: none;
+}
+.cmp-btn:focus-visible, .cmp-play:focus-visible, .cmp-step:focus-visible,
+.cmp-mode:focus-visible, .cmp-mini:focus-visible {
+  outline: none; box-shadow: 0 0 0 3px rgba(18, 87, 166, 0.22);
+}
+
+/* ---- Advisory banner: data provenance ---- */
+.cmp-warn {
+  padding: 8px 18px; font-size: 12px; flex-shrink: 0;
+  background: var(--notice-bg); color: var(--notice-ink);
+  border-bottom: 1px solid var(--notice-line);
+}
+.cmp-warn code {
+  background: rgba(120, 74, 0, 0.1); padding: 1.5px 5px; border-radius: 3px;
+  font-size: 11.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ---- Panels ---- */
+/* min-width:0 is load-bearing. Without it this flex item's automatic minimum
+   is its min-content width, which the canvases' inline width:NNNpx sets — and
+   since the resize observer sizes each canvas to its host, the layout can then
+   only ever grow: shrink the window and the panels stay at their widest,
+   overflowing the sidebar row instead of splitting what is left. */
+.cmp-panels { flex: 1; display: flex; min-width: 0; min-height: 0; gap: 1px; background: var(--line-2); }
+.cmp-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface); }
+.cmp-panel-head {
+  display: flex; align-items: baseline; gap: 9px; padding: 9px 15px; flex-shrink: 0;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.cmp-panel-head b {
+  font-size: 12.5px; font-weight: 600; letter-spacing: -0.005em; color: var(--ink);
+}
+.cmp-panel-head span { font-size: 11px; color: var(--ink-3); }
+.cmp-canvas {
+  flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden;
+  background: var(--surface-3);
+}
+/* Out of flow so the canvas can never contribute to any ancestor's
+   min-content width — belt and braces for the ratchet described above. */
+.cmp-canvas canvas { display: block; position: absolute; inset: 0; }
+
+/* ---- Colour key ---- */
+.cmp-legend {
+  display: flex; align-items: center; gap: 11px; padding: 7px 15px; height: 30px;
+  flex-shrink: 0; font-size: 11px; color: var(--ink-3);
+  background: var(--surface); border-top: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.cmp-legend-name {
+  color: var(--ink-2); font-weight: 500; font-variant-numeric: normal;
+}
+.cmp-legend-name em { font-style: normal; color: var(--ink-3); font-weight: 400; }
+.cmp-ramp {
+  flex: 1; height: 10px; border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(15,23,42,0.12);
+  /* gradient set inline from rampCss() so the key cannot drift from the render */
+}
+
+/* ---- Playback ---- */
+.cmp-foot {
+  display: flex; align-items: center; gap: 11px; padding: 11px 18px; flex-shrink: 0;
+  background: var(--surface); border-top: 1px solid var(--line);
+  box-shadow: 0 -1px 2px rgba(15,23,42,0.04);
+}
+.cmp-read {
+  font-size: 11.5px; color: var(--ink-3); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cmp-read b { color: var(--ink); font-weight: 600; }
+
+.cmp-step {
+  min-width: 48px; padding: 6px 10px; font: 500 12px/1.2 inherit; cursor: pointer;
+  border: 1px solid var(--line-2); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink-2);
+  box-shadow: var(--sh-1); transition: all var(--ease);
+}
+.cmp-step:hover { color: var(--ink); border-color: rgba(15,23,42,0.22); }
+.cmp-play {
+  min-width: 68px; padding: 6px 14px; font: 600 12px/1.2 inherit; cursor: pointer;
+  border: 1px solid var(--accent); border-radius: var(--r-sm);
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  color: #fff; box-shadow: var(--sh-1); transition: all var(--ease);
+}
+.cmp-play:hover { filter: brightness(1.07); box-shadow: var(--sh-2); }
+.cmp-play:active { filter: brightness(0.96); box-shadow: none; }
+
+/* ---- Range inputs ---- */
+.cmp-root input[type=range] {
+  -webkit-appearance: none; appearance: none; background: transparent;
+  height: 16px; cursor: pointer;
+}
+.cmp-root input[type=range]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px; background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.cmp-root input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; margin-top: -5px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--line-2);
+  box-shadow: var(--sh-1); transition: box-shadow var(--ease);
+}
+.cmp-root input[type=range]:hover::-webkit-slider-thumb { border-color: var(--accent-line); }
+.cmp-root input[type=range]:focus-visible::-webkit-slider-thumb {
+  outline: none; box-shadow: 0 0 0 3px rgba(18,87,166,0.22);
+}
+.cmp-foot input[type=range] { flex: 1; min-width: 120px; }
+
+/* ---- Side panel ---- */
+.cmp-body { flex: 1; display: flex; min-height: 0; }
+.cmp-side {
+  width: 204px; flex-shrink: 0; padding: 14px 13px 18px; overflow-y: auto;
+  background: var(--surface-2); border-right: 1px solid var(--line-2);
+  display: flex; flex-direction: column; gap: 7px;
+  scrollbar-width: thin;
+}
+.cmp-side-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-3); margin: 13px 1px 4px;
+}
+.cmp-side-head:first-child { margin-top: 0; }
+.cmp-mini {
+  margin-left: auto; padding: 2.5px 7px; font: 400 9.5px/1.2 inherit;
+  cursor: pointer; border: 1px solid var(--line-2); border-radius: 3px;
+  background: var(--surface); color: var(--ink-2);
+  text-transform: none; letter-spacing: 0; transition: all var(--ease);
+}
+.cmp-mini + .cmp-mini { margin-left: 0; }
+.cmp-mini:hover { border-color: var(--accent-line); color: var(--accent); }
+
+.cmp-mode {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  padding: 9px 11px; border-radius: var(--r); cursor: pointer;
+  font: 500 12px/1.25 inherit;
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink-2); box-shadow: var(--sh-1); transition: all var(--ease);
+}
+.cmp-mode em {
+  font: 400 10.5px/1.35 inherit; font-style: normal; color: var(--ink-3);
+}
+.cmp-mode:hover:not(:disabled) { box-shadow: var(--sh-2); color: var(--ink); }
+.cmp-mode.on {
+  background: var(--accent-weak); border-color: var(--accent-line);
+  color: var(--accent); box-shadow: none;
+}
+.cmp-mode.on em { color: var(--ink-2); }
+.cmp-mode:disabled {
+  color: var(--ink-3); cursor: not-allowed; background: var(--sunken);
+  border-color: var(--line); box-shadow: none; opacity: 0.6;
+}
+
+.cmp-field { display: flex; flex-direction: column; gap: 3px; padding: 3px 2px; }
+.cmp-field span {
+  display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3);
+}
+.cmp-field b {
+  color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.cmp-field input { width: 100%; }
+
+.cmp-key { list-style: none; display: flex; flex-direction: column; gap: 1px; }
+.cmp-key li {
+  display: flex; align-items: center; gap: 8px; font-size: 11px;
+  color: var(--ink-2); cursor: pointer; padding: 3px 5px;
+  border-radius: var(--r-sm); transition: background var(--ease);
+}
+.cmp-key li:hover { background: rgba(15,23,42,0.045); color: var(--ink); }
+.cmp-key li.off { color: var(--ink-3); }
+.cmp-key li.off i { background: var(--surface) !important; }
+.cmp-key i {
+  width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(15,23,42,0.22);
+}
+.cmp-key span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-key b {
+  color: var(--ink-3); font-weight: 400; font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Selects ---- */
+.cmp-select { display: flex; flex-direction: column; gap: 4px; padding: 2px; }
+.cmp-select > span {
+  font-size: 10.5px; color: var(--ink-3); font-weight: 500; letter-spacing: 0.01em;
+}
+.cmp-select select {
+  width: 100%; padding: 7px 26px 7px 9px; font: 500 11.5px/1.2 inherit;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line-2); border-radius: var(--r-sm);
+  box-shadow: var(--sh-1); cursor: pointer; transition: all var(--ease);
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236d7887' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 9px center;
+}
+.cmp-select select:hover { border-color: rgba(15,23,42,0.22); }
+.cmp-select select:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(18,87,166,0.22); }
+.cmp-select select option:disabled { color: var(--ink-3); }
+
+.cmp-prov {
+  font-size: 10.5px; line-height: 1.45; padding: 8px 10px; border-radius: var(--r-sm);
+  background: var(--accent-weak); color: var(--ink-2);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.cmp-prov.unvalidated, .cmp-prov.missing {
+  background: var(--notice-bg); color: var(--notice-ink);
+  box-shadow: inset 2px 0 0 rgba(180,120,20,0.6);
+}
+.cmp-prov code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px;
+  background: rgba(120,74,0,0.09); padding: 1px 4px; border-radius: 2px;
+}
+
+.cmp-size { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--ink-3); }
+.cmp-size input { width: 84px; }
+.cmp-size-read { min-width: 44px; color: var(--ink-2); font-variant-numeric: tabular-nums; }

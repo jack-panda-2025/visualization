@@ -1,0 +1,144 @@
+{
+  "schema": 2,
+  "note": "Single source of truth for the condition selector. status: 'ready' = COL2 files present and selectable; 'pending' = the LS-DYNA run exists but the rollout/conversion has not been generated yet; anything not listed at all has no simulation. Appended to by collider's tools/gen_case_matrix.py.",
+  "dimensions": {
+    "speed_kmh": [
+      60,
+      70,
+      80,
+      90,
+      100
+    ],
+    "angle_deg": [
+      -25.4,
+      -20,
+      -15
+    ],
+    "barrier": [
+      {
+        "id": "t_lok",
+        "label": "T-lok F-shape",
+        "material": "T_lok",
+        "layers": 0,
+        "thickness": 0
+      },
+      {
+        "id": "new_no_beam",
+        "label": "New barrier, no beam",
+        "material": "New_No_Beam",
+        "layers": 4,
+        "thickness": 1
+      },
+      {
+        "id": "new_beam_0",
+        "label": "New barrier + W-beam",
+        "material": "New_Beam",
+        "layers": 0,
+        "thickness": 0
+      },
+      {
+        "id": "new_beam_2",
+        "label": "New barrier + beam, 2L",
+        "material": "New_Beam",
+        "layers": 2,
+        "thickness": 0
+      },
+      {
+        "id": "new_beam_3",
+        "label": "New barrier + beam, 3L",
+        "material": "New_Beam",
+        "layers": 3,
+        "thickness": 0
+      },
+      {
+        "id": "new_beam_4",
+        "label": "New barrier + beam, 4L",
+        "material": "New_Beam",
+        "layers": 4,
+        "thickness": 0
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "model_100km",
+      "status": "ready",
+      "validated": true,
+      "speed_kmh": 100,
+      "angle_deg": -25.4,
+      "barrier": "t_lok",
+      "checkpoint": "wj09_r3",
+      "source_h5": "data/T_lok_F_shape_barrier_9_3_100km.h5"
+    },
+    {
+      "id": "t_lok_60",
+      "status": "pending",
+      "validated": true,
+      "speed_kmh": 60,
+      "angle_deg": -25.4,
+      "barrier": "t_lok",
+      "checkpoint": "wj09_r3",
+      "source_h5": "T_lok_F_shape_barrier_9_3_60km.h5"
+    },
+    {
+      "id": "t_lok_80",
+      "status": "pending",
+      "validated": true,
+      "speed_kmh": 80,
+      "angle_deg": -25.4,
+      "barrier": "t_lok",
+      "checkpoint": "wj09_r3",
+      "source_h5": "T_lok_F_shape_barrier_9_3_80km.h5"
+    },
+    {
+      "id": "new_no_beam_100",
+      "status": "pending",
+      "validated": true,
+      "speed_kmh": 100,
+      "angle_deg": -25.4,
+      "barrier": "new_no_beam",
+      "checkpoint": "wj09_r3",
+      "source_h5": "New_Road_Barrier_10_14_FD_0_3_0_1_LR_NoThic.h5"
+    },
+    {
+      "id": "new_beam_0_100",
+      "status": "pending",
+      "validated": true,
+      "speed_kmh": 100,
+      "angle_deg": -25.4,
+      "barrier": "new_beam_0",
+      "checkpoint": "wj09_r3",
+      "source_h5": "New_Road_Barrier_concrete_W_beam.h5"
+    },
+    {
+      "id": "new_beam_2_100",
+      "status": "pending",
+      "validated": true,
+      "speed_kmh": 100,
+      "angle_deg": -25.4,
+      "barrier": "new_beam_2",
+      "checkpoint": "wj09_r3",
+      "source_h5": "New_Road_Barrier_W_beam_two_layer.h5"
+    },
+    {
+      "id": "new_beam_3_100",
+      "status": "pending",
+      "validated": true,
+      "speed_kmh": 100,
+      "angle_deg": -25.4,
+      "barrier": "new_beam_3",
+      "checkpoint": "wj09_r3",
+      "source_h5": "New_Road_Barrier_W_beam_three_layer.h5"
+    },
+    {
+      "id": "new_beam_4_100",
+      "status": "pending",
+      "validated": true,
+      "speed_kmh": 100,
+      "angle_deg": -25.4,
+      "barrier": "new_beam_4",
+      "checkpoint": "wj09_r3",
+      "source_h5": "New_Road_Barrier_concrete_W_beam_four_layer.h5"
+    }
+  ]
+}

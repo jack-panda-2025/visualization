@@ -18,3 +18,11 @@ __pycache__/
 vtp_output_v3/
 *.ply
 .claude/
+
+# Secrets
+.env
+.env.local
+
+# Generated viewer data — produced by collider's tools/h5_to_col2.py alongside
+# the *.bin pair above, so it is regenerated rather than versioned.
+collision-viewer/public/*_meta.json
