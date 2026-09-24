@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import PointsView from './components/PointsView'
 import SurfaceView from './components/SurfaceView'
+import MeshView from './components/MeshView'
 
 // Two fully separate comparison pages, each with its own URL:
 //
@@ -15,6 +16,7 @@ import SurfaceView from './components/SurfaceView'
 // runs; it would otherwise pull its own 151 MB file first.
 const params = new URLSearchParams(window.location.search)
 const surfaceStem = params.get('surface')
+const meshStem = params.get('mesh')
 // ?compare= was the original single page; keep it working, pointed at points.
 const pointsStem = params.get('points') ?? params.get('compare')
 
@@ -25,7 +27,9 @@ const exitToSingle = () => { window.location.href = window.location.pathname }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {surfaceStem
+    {meshStem
+      ? <MeshView stem={meshStem} onExit={exitToSingle} />
+      : surfaceStem
       ? <SurfaceView stem={surfaceStem} onExit={exitToSingle}
           onPoints={() => go('points', surfaceStem)} />
       : pointsStem

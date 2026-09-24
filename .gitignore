@@ -26,3 +26,10 @@ vtp_output_v3/
 # Generated viewer data — produced by collider's tools/h5_to_col2.py alongside
 # the *.bin pair above, so it is regenerated rather than versioned.
 collision-viewer/public/*_meta.json
+
+# Raw LS-DYNA output pulled from the cluster
+data_raw/
+
+# Generated mesh frames — produced by mesh_extract.py, same rule as the .bin
+# pair: regenerate rather than version.
+*.msh
