@@ -46,7 +46,9 @@ export const GROUP_COLOR: Record<string, string> = {
   'Lights': '#c08a2a', 'Glazing': '#7fa8b8', 'Doors': '#7a7f3a',
   'Roof & cab rail': '#4a5d8a', 'Pillars': '#6b5a8a', 'Cab body': '#4a7f52',
   'Bed': '#8a7a4a', 'Floor & firewall': '#8a5a2b', 'Frame & rails': '#7f4a4a',
-  'Powertrain': '#2f6b6b', 'Suspension': '#9a6b8a', 'Occupant': '#b08a2e',
+  'Powertrain': '#2f6b6b', 'Suspension': '#7d838c', 'Occupant': '#b08a2e',
+  'Wheels': '#3c3f46',   // split out of Suspension: visible outside, so it
+                         // survives the outer-only cut. Dark, like rubber.
   'Instrument panel': '#566370', 'Sensors': '#b5514c', 'Other': '#5c6169',
   'Ground': '#3a3f45', 'Ground (synthetic)': '#2b3036',
 };

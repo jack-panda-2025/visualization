@@ -42,7 +42,7 @@ from lasso.dyna import ArrayType, D3plot
 RULES: list[tuple[str, str]] = [
     ('Ground',           r'rigid fixed ground'),
     ('Barrier concrete', r'concrete|core|skin'),
-    ('Barrier steel',    r'steel tube|t lok|rebar|reinforcement|wave beam'),
+    ('Barrier steel',    r'steel tube|t lok|^reinforcement|anchor rebar|wave beam'),
     ('Hood',             r'hood'),
     ('Fender',           r'fender'),
     ('Bumper',           r'bumper|frontface|grille|tow'),
@@ -56,7 +56,8 @@ RULES: list[tuple[str, str]] = [
     ('Floor & firewall', r'floor|firewall|dash(?!.*screen)|tunnel'),
     ('Frame & rails',    r'rail|xmember|crossmem|frame|bodymount|shackle|brkt|bracket|sidebar|cornersupport'),
     ('Powertrain',       r'engine|transmiss|radiator|condensor|fan|gastank|fuel|battery|exhaust|muffler|oilpan|clutch|driveshaft|axle|differen|manifold|fusebox'),
-    ('Suspension',       r'tire|rim|wheel|aarm|upright|spindle|disk|brake|shock|sway|spring|leaf|suspension|steering|knuckle|tierod'),
+    ('Wheels',           r'tire|rim|wheel'),
+    ('Suspension',       r'aarm|upright|spindle|disk|brake|shock|sway|spring|leaf|suspension|steering|knuckle|tierod'),
     ('Occupant',         r'seat|foam|dummy|belt|airbag|headrest|strap'),
     ('Instrument panel', r'ipbeam|dashboard|glovebox|console|steeringcol'),
     ('Sensors',          r'accelerom|sensor|nrb|rigid|spot weld'),
@@ -159,6 +160,14 @@ def main() -> None:
     ap.add_argument('--out', type=Path, default=Path('mesh_frame.npz'))
     ap.add_argument('--bin', type=Path, default=None,
                     help='Also write MSH1, the format the viewer loads')
+    ap.add_argument('--barrier-margin', type=float, default=None, metavar='M',
+                    help='Keep barrier only within M metres of the vehicle. '
+                         'The barrier runs 73 m; the vehicle is 6 m and never '
+                         'reaches most of it.')
+    ap.add_argument('--outer-only', action='store_true',
+                    help='Drop assemblies that sit under the skin — frame, '
+                         'powertrain, floor, seats. Invisible from outside '
+                         'and about 38%% of the triangles.')
     ap.add_argument('--keep-barrier-inner', action='store_true',
                     help='Keep the barrier core and inter-skin layers')
     args = ap.parse_args()
@@ -178,11 +187,67 @@ def main() -> None:
           f't = {a[ArrayType.global_timesteps][0]:.4f} s')
     print(f'{"":26}{"before":>12}{"after":>12}')
 
+    # ── trim the barrier to the impact region ────────────────────────────
+    # Per element, not per part: every barrier part spans the full 73 m, so a
+    # part-level test keeps all of them as soon as one element is near the car.
+    #
+    # Tested as a box around the vehicle rather than a range along x — the
+    # barrier lies at -25.4 degrees, so no single axis describes its length.
+    # The margin must cover where the vehicle *travels*, not just where it
+    # starts: at 100 km/h it moves ~26 m, and a frame-0 box would cut away the
+    # barrier it is about to hit.
+    # Assemblies that form the visible outside. Everything else sits under
+    # the skin and contributes nothing to an exterior view. Wheels are listed
+    # explicitly: they are suspension by function but plainly visible.
+    OUTER = {'Barrier concrete', 'Barrier steel', 'Hood', 'Fender', 'Bumper',
+             'Lights', 'Glazing', 'Doors', 'Roof & cab rail', 'Pillars',
+             'Cab body', 'Bed', 'Wheels', 'Ground',
+             # A thin liner. Without it you see straight through the window
+             # openings, wheel arches and underbody into an empty shell.
+             'Floor & firewall',
+             # Axles, uprights, control arms. Only ~36 k shells once wheels
+             # are counted separately, and without them the wheels float.
+             'Suspension'}
+    if args.outer_only:
+        inner = ~np.isin(groups, list(OUTER))
+        print(f'{"parts: outer only":26}{len(titles):>12,}'
+              f'{int((~inner & ~part_dropped).sum()):>12,}')
+        part_dropped = part_dropped | inner
+
+    is_barrier = np.char.startswith(groups, 'Barrier')
+    box = None
+    if args.barrier_margin is not None:
+        # Groups that are unambiguously the vehicle's outer shell. Defining
+        # the vehicle by negation ("not barrier") fails: names like
+        # 216_fr_bodymountrearbrktreinforcementR match the barrier's
+        # reinforcement rule, and one stray part anywhere in the scene
+        # inflates the box until it covers everything.
+        CORE = {'Cab body', 'Doors', 'Hood', 'Roof & cab rail', 'Bed',
+                'Bumper', 'Fender', 'Glazing', 'Pillars'}
+        veh_parts = np.flatnonzero(np.isin(groups, list(CORE)) & ~part_dropped)
+        vmask = np.isin(a[ArrayType.element_shell_part_indexes], veh_parts)
+        vnodes = np.unique(a[ArrayType.element_shell_node_indexes][vmask])
+        m = args.barrier_margin * 1000
+        box = (pos_all[vnodes].min(0) - m, pos_all[vnodes].max(0) + m)
+
+    def in_range(conn: np.ndarray, part: np.ndarray) -> np.ndarray:
+        """True for elements to keep: everything outside the barrier, plus the
+        barrier elements whose centroid falls inside the box."""
+        keep = np.ones(len(conn), bool)
+        if box is None:
+            return keep
+        b = is_barrier[part]
+        if not b.any():
+            return keep
+        c = pos_all[conn[b]].mean(axis=1)
+        keep[b] = ((c >= box[0]) & (c <= box[1])).all(axis=1)
+        return keep
+
     # ── shells ───────────────────────────────────────────────────────────
     sconn = a[ArrayType.element_shell_node_indexes]
     spart = a[ArrayType.element_shell_part_indexes]
     salive = a[ArrayType.element_shell_is_alive][0] != 0
-    s_keep = ~part_dropped[spart]
+    s_keep = ~part_dropped[spart] & in_range(sconn, spart)
     print(f'{"shells: drop parts":26}{len(sconn):>12,}{int(s_keep.sum()):>12,}')
     s_keep &= salive
     print(f'{"shells: drop dead":26}{"":>12}{int(s_keep.sum()):>12,}')
@@ -191,7 +256,7 @@ def main() -> None:
     hconn = a[ArrayType.element_solid_node_indexes]
     hpart = a[ArrayType.element_solid_part_indexes]
     halive = a[ArrayType.element_solid_is_alive][0] != 0
-    h_keep = (~part_dropped[hpart]) & halive
+    h_keep = (~part_dropped[hpart]) & in_range(hconn, hpart) & halive
     print(f'{"solids: kept":26}{len(hconn):>12,}{int(h_keep.sum()):>12,}')
     hfaces = boundary_faces(hconn, h_keep)
     print(f'{"solids: boundary faces":26}{int(h_keep.sum()) * 6:>12,}{len(hfaces):>12,}')
