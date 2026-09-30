@@ -33,3 +33,4 @@ data_raw/
 # Generated mesh frames — produced by mesh_extract.py, same rule as the .bin
 # pair: regenerate rather than version.
 *.msh
+*.msh2

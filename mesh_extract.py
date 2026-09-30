@@ -70,6 +70,24 @@ RULES: list[tuple[str, str]] = [
 # layer separation at the impact becomes the subject.
 DROP_PATTERNS = [
     r'rigid fixed ground',
+    # Panels pressed directly against an outer skin. Real sheet metal is two
+    # sheets spot-welded a few millimetres apart, and the simulation models
+    # both; at that separation the depth buffer cannot tell them apart, so the
+    # inner one shows through as dark z-fighting seams tracing its outline
+    # across the hood and roof. Pushing the near plane out fixes the depth
+    # precision but clips the body whenever the camera comes close, so the
+    # inner panel goes instead — it is never visible from outside anyway.
+    #
+    # Deliberately narrow: doorinner, pillarinner and riminner all match a
+    # plain 'inner' rule but are visible through openings or from the side.
+    r'hoodinner',
+    r'roofrail',
+    # Laminated glass is modelled as three coincident layers — outer glass,
+    # PVB interlayer, inner glass. Detected, not guessed: a 5 mm voxel scan
+    # found these three sharing 12,043 cells, by far the worst overlap in the
+    # mesh. Keep the outer layer only.
+    r'windshield_bottom_layer',
+    r'windshield_ploymer',
     r'inter skin',
     r'(first|second|third|fourth) core',
 ]
@@ -87,6 +105,17 @@ def group_of(name: str) -> str:
         if re.search(rx, low):
             return label
     return 'Other'
+
+
+def state_files(case: Path) -> list[str]:
+    """d3plot01 … d3plot202, ordered numerically.
+
+    Sorted by the integer, not the string: plain sort puts d3plot100 before
+    d3plot20, so the "last" frame would be d3plot99.
+    """
+    names = [f for f in os.listdir(case)
+             if f.startswith('d3plot') and f[6:].isdigit()]
+    return sorted(names, key=lambda f: int(f[6:]))
 
 
 def open_frame(case: Path, state: str) -> D3plot:
@@ -153,11 +182,56 @@ def write_msh1(path: Path, positions: np.ndarray, tris: np.ndarray,
     print(f'wrote {path}  ({path.stat().st_size/1e6:.1f} MB)  {len(names)} groups')
 
 
+def write_msh2(path: Path, frames: list[tuple[float, np.ndarray]],
+               tris: np.ndarray, tri_part: np.ndarray, tri_death: np.ndarray,
+               titles: np.ndarray, groups: np.ndarray) -> None:
+    """MSH2 — connectivity once, then one position block per frame.
+
+    Connectivity is constant across the run (verified: element counts and
+    their node indices are identical in frame 1 and frame 202), so repeating
+    it per frame would triple the file for nothing.
+
+    tri_death is how erosion is handled. A deleted element keeps its node
+    positions while those nodes keep moving, so drawing it stretches a face
+    across the scene; but deletion is monotonic, so each triangle carries the
+    frame it dies at and the shader drops it from there on. That keeps the
+    index buffer immutable and costs nothing per frame.
+    """
+    names = sorted(set(groups.tolist())) + ['Ground (synthetic)']
+    idx = {n: i for i, n in enumerate(names)}
+    tri_group = np.where(tri_part < 0, idx['Ground (synthetic)'],
+                         [idx[g] for g in groups[np.maximum(tri_part, 0)]]
+                         ).astype(np.uint8)
+    n_vert = len(frames[0][1])
+
+    with open(path, 'wb') as f:
+        f.write(b'MSH2')
+        f.write(np.array([n_vert, len(tris), len(names), len(frames)], '<i4').tobytes())
+        f.write(np.array([t for t, _ in frames], '<f4').tobytes())
+        f.write(np.ascontiguousarray(tris, '<u4').tobytes())
+        f.write(tri_group.tobytes())
+        f.write(np.ascontiguousarray(tri_death, '<u2').tobytes())
+        for n in names:
+            b = n.encode('utf-8')
+            f.write(bytes([len(b)])); f.write(b)
+        for _, pos in frames:
+            f.write(np.ascontiguousarray(pos, '<f4').tobytes())
+
+    mb = path.stat().st_size / 1e6
+    print(f'wrote {path}  ({mb:.1f} MB)  {len(frames)} frames, '
+          f'{n_vert:,} verts, {len(tris):,} tris')
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('--case', type=Path, required=True)
     ap.add_argument('--state', default='d3plot01')
     ap.add_argument('--out', type=Path, default=Path('mesh_frame.npz'))
+    ap.add_argument('--frames', type=int, default=None, metavar='N',
+                    help='Write N frames spread evenly over the run, as MSH2. '
+                         'Requires --anim.')
+    ap.add_argument('--anim', type=Path, default=None,
+                    help='MSH2 output path (multi-frame)')
     ap.add_argument('--bin', type=Path, default=None,
                     help='Also write MSH1, the format the viewer loads')
     ap.add_argument('--barrier-margin', type=float, default=None, metavar='M',
@@ -310,6 +384,51 @@ def main() -> None:
     if args.bin:
         write_msh1(args.bin, positions, tris, tpart, titles, groups,
                    float(a[ArrayType.global_timesteps][0]))
+
+    # ── the rest of the frames ───────────────────────────────────────────
+    # Topology, the kept-element masks and the node subset are all decided
+    # above from the first frame and reused unchanged: connectivity does not
+    # vary across the run, and re-deriving it per frame would also risk the
+    # element set drifting, which would invalidate the index buffer.
+    if args.frames and args.anim:
+        all_states = state_files(args.case.resolve())
+        pick = [all_states[i] for i in
+                np.linspace(0, len(all_states) - 1, args.frames).astype(int)]
+        print(f'\nframes: {args.frames} of {len(all_states)}  '
+              f'{pick[0]} … {pick[-1]}')
+
+        n_quad_tris = len(tris) - 2                      # minus the ground pair
+        death = np.full(n_quad_tris, 0xFFFF, np.uint16)  # 0xFFFF = survives
+        out_frames: list[tuple[float, np.ndarray]] = []
+
+        for fi, state in enumerate(pick):
+            df = open_frame(args.case, state) if fi else d
+            fa = df.arrays
+            fpos = fa[ArrayType.node_displacement][0].astype(np.float32)
+            gp = fpos[used]
+            # the synthetic ground is fixed; recompute nothing, reuse frame 0's
+            out_frames.append((float(fa[ArrayType.global_timesteps][0]),
+                               np.vstack([gp, gpos])))
+
+            # is_alive holds the part id and is zeroed on deletion, so the
+            # test is != 0. Deletion is monotonic, so the first frame a
+            # triangle is dead is the frame it dies at.
+            sdead = fa[ArrayType.element_shell_is_alive][0][s_keep] == 0
+            hdead = np.zeros(len(hfaces), bool)
+            if len(hfaces):
+                hd = fa[ArrayType.element_solid_is_alive][0][h_keep] == 0
+                hdead = hd.repeat(6)[ok][cnt[inv] == 1]
+            qdead = np.concatenate([sdead, hdead])
+            tdead = np.tile(qdead, 2)
+            death[tdead & (death == 0xFFFF)] = fi
+            if fi:
+                del df
+            print(f'  {state:<10} t={out_frames[-1][0]:6.3f}s  '
+                  f'dead so far {int((death != 0xFFFF).sum()):,}')
+
+        write_msh2(args.anim, out_frames, tris,
+                   np.concatenate([tpart[:n_quad_tris], [-1, -1]]),
+                   np.concatenate([death, [0xFFFF, 0xFFFF]]), titles, groups)
 
     np.savez_compressed(
         args.out, positions=positions, triangles=tris, tri_part=tpart,

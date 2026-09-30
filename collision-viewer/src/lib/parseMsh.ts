@@ -9,6 +9,53 @@ export interface MeshData {
   groups: string[];
 }
 
+export interface AnimData {
+  times: Float32Array;       // n_frames, seconds
+  frames: Float32Array[];    // n_frames x (n_verts * 3), mm
+  triangles: Uint32Array;
+  triGroup: Uint8Array;
+  triDeath: Uint16Array;     // frame each triangle is deleted; 0xFFFF survives
+  groups: string[];
+}
+
+/** MSH2 — connectivity once, then one position block per frame.
+ *  See write_msh2() in ../../mesh_extract.py for the layout. */
+export function parseMsh2(buffer: ArrayBuffer): AnimData {
+  const view = new DataView(buffer);
+  const magic = String.fromCharCode(...new Uint8Array(buffer, 0, 4));
+  if (magic !== 'MSH2') throw new Error(`Not a MSH2 file (magic "${magic}")`);
+
+  const nVerts = view.getInt32(4, true);
+  const nTris = view.getInt32(8, true);
+  const nGroups = view.getInt32(12, true);
+  const nFrames = view.getInt32(16, true);
+
+  let off = 20;
+  const times = new Float32Array(buffer.slice(off, off + nFrames * 4));
+  off += nFrames * 4;
+  const triangles = new Uint32Array(buffer.slice(off, off + nTris * 12));
+  off += nTris * 12;
+  const triGroup = new Uint8Array(buffer.slice(off, off + nTris));
+  off += nTris;
+  const triDeath = new Uint16Array(buffer.slice(off, off + nTris * 2));
+  off += nTris * 2;
+
+  const groups: string[] = [];
+  const dec = new TextDecoder();
+  for (let i = 0; i < nGroups; i++) {
+    const len = view.getUint8(off); off += 1;
+    groups.push(dec.decode(new Uint8Array(buffer, off, len))); off += len;
+  }
+
+  const frames: Float32Array[] = [];
+  const block = nVerts * 12;
+  for (let f = 0; f < nFrames; f++) {
+    frames.push(new Float32Array(buffer.slice(off, off + block)));
+    off += block;
+  }
+  return { times, frames, triangles, triGroup, triDeath, groups };
+}
+
 export function parseMsh(buffer: ArrayBuffer): MeshData {
   const view = new DataView(buffer);
   const magic = String.fromCharCode(...new Uint8Array(buffer, 0, 4));
